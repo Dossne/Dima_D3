@@ -10,7 +10,10 @@ namespace TapMiner.Core
     {
         private readonly float minimumSwipeDistancePixels;
 
+        private int lastPolledFrame = -1;
         private bool pointerTrackingActive;
+        private bool pendingTap;
+        private int pendingSwipeDirection;
         private Vector2 pointerStartPosition;
 
         public SwipeInputInterpreter(float minimumSwipeDistancePixels)
@@ -18,73 +21,90 @@ namespace TapMiner.Core
             this.minimumSwipeDistancePixels = Mathf.Max(1f, minimumSwipeDistancePixels);
         }
 
-        public bool TryConsumeSwipeDirection(out int direction)
+        public void PollFrame()
         {
-            direction = 0;
-
-            if (TryConsumeTouchSwipe(out direction))
+            if (lastPolledFrame == Time.frameCount)
             {
-                return true;
+                return;
             }
 
-            return TryConsumeMouseSwipe(out direction);
+            lastPolledFrame = Time.frameCount;
+            PollPointerFrame();
         }
 
-        private bool TryConsumeTouchSwipe(out int direction)
+        public bool TryConsumeTap()
         {
-            direction = 0;
+            if (!pendingTap)
+            {
+                return false;
+            }
+
+            pendingTap = false;
+            return true;
+        }
+
+        public bool TryConsumeSwipeDirection(out int direction)
+        {
+            if (pendingSwipeDirection == 0)
+            {
+                direction = 0;
+                return false;
+            }
+
+            direction = pendingSwipeDirection;
+            pendingSwipeDirection = 0;
+            return true;
+        }
+
+        private void PollPointerFrame()
+        {
             var pointer = Pointer.current;
             if (pointer == null)
             {
-                return false;
+                return;
             }
 
             if (pointer.press.wasPressedThisFrame)
             {
                 pointerTrackingActive = true;
                 pointerStartPosition = pointer.position.ReadValue();
-                return false;
+                return;
             }
 
             if (pointer.press.wasReleasedThisFrame)
             {
                 if (!pointerTrackingActive)
                 {
-                    return false;
+                    return;
                 }
 
                 pointerTrackingActive = false;
-                return TryClassifySwipe(pointerStartPosition, pointer.position.ReadValue(), out direction);
+                ClassifyPointerRelease(pointerStartPosition, pointer.position.ReadValue());
             }
-
-            return false;
         }
 
-        private bool TryConsumeMouseSwipe(out int direction)
+        private void ClassifyPointerRelease(Vector2 startPosition, Vector2 endPosition)
         {
-            direction = 0;
-            return false;
-        }
-
-        private bool TryClassifySwipe(Vector2 startPosition, Vector2 endPosition, out int direction)
-        {
-            direction = 0;
             var delta = endPosition - startPosition;
             var horizontalDistance = Mathf.Abs(delta.x);
             var verticalDistance = Mathf.Abs(delta.y);
 
             if (horizontalDistance < minimumSwipeDistancePixels)
             {
-                return false;
+                pendingTap = true;
+                pendingSwipeDirection = 0;
+                return;
             }
 
             if (horizontalDistance <= verticalDistance)
             {
-                return false;
+                pendingTap = false;
+                pendingSwipeDirection = 0;
+                return;
             }
 
-            direction = delta.x < 0f ? -1 : 1;
-            return true;
+            pendingTap = false;
+            pendingSwipeDirection = delta.x < 0f ? -1 : 1;
         }
     }
 }

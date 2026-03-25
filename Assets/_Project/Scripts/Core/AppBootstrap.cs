@@ -38,6 +38,28 @@ namespace TapMiner.Core
         [SerializeField]
         private bool debugIsLaneTransitioning;
 
+        [Header("Loop Debug Commands")]
+        [SerializeField]
+        private bool debugRequestStartRun;
+
+        [SerializeField]
+        private bool debugRequestRestartRun;
+
+        [SerializeField]
+        private bool debugRequestProcessCurrentSegment;
+
+        [SerializeField]
+        private bool debugRequestBreakCurrentLaneTarget;
+
+        [SerializeField]
+        private bool debugRequestResolveCurrentLaneHazardContact;
+
+        [SerializeField]
+        private bool debugRequestLaneLeft;
+
+        [SerializeField]
+        private bool debugRequestLaneRight;
+
         [Header("Segment Runtime")]
         [SerializeField]
         private int initialSegmentBatchCount = 12;
@@ -89,6 +111,13 @@ namespace TapMiner.Core
 
         [SerializeField]
         private int debugSuccessfulHazardContactCount;
+
+        [Header("Loop Runtime")]
+        [SerializeField]
+        private int debugCompletedSegmentCount;
+
+        [SerializeField]
+        private int debugLastCompletedSegmentIndex = -1;
 
         private RunStateMachine runStateMachine = null!;
         private SwipeInputInterpreter swipeInputInterpreter = null!;
@@ -143,13 +172,19 @@ namespace TapMiner.Core
                 return;
             }
 
+            swipeInputInterpreter.PollFrame();
             laneTransitionController.Tick(Time.deltaTime);
+
+            if (swipeInputInterpreter.TryConsumeTap())
+            {
+                HandleTapInteraction();
+            }
 
             if (swipeInputInterpreter.TryConsumeSwipeDirection(out var direction))
             {
                 HandleMovementSwipe(direction);
             }
-
+            ProcessDebugCommands();
             SyncDebugState();
         }
 
@@ -201,6 +236,11 @@ namespace TapMiner.Core
             return TryResolveBreakAtLane(laneIndex);
         }
 
+        public bool RequestProcessCurrentSegment()
+        {
+            return TryProcessCurrentSegment();
+        }
+
         public HazardContactResult RequestResolveCurrentLaneHazardContact()
         {
             return TryResolveHazardAtLaneInternal(CurrentCommittedLaneIndex);
@@ -210,6 +250,19 @@ namespace TapMiner.Core
         {
             return TryResolveHazardAtLaneInternal(laneIndex);
         }
+
+#if UNITY_EDITOR
+        public void DebugAdvanceRuntimeLoop(float deltaTime)
+        {
+            if (laneTransitionController == null)
+            {
+                return;
+            }
+
+            laneTransitionController.Tick(deltaTime);
+            SyncDebugState();
+        }
+#endif
 
         private bool TryCommand(string commandName, System.Func<bool> command)
         {
@@ -224,6 +277,22 @@ namespace TapMiner.Core
             return result;
         }
 
+        private void HandleTapInteraction()
+        {
+            switch (CurrentRunState)
+            {
+                case RunState.RunReady:
+                    RequestStartRun();
+                    break;
+                case RunState.RunActive:
+                    RequestProcessCurrentSegment();
+                    break;
+                case RunState.RunDeathResolved:
+                    RequestRestartRun();
+                    break;
+            }
+        }
+
         private bool HandleMovementSwipe(int direction)
         {
             if (!runStateMachine.CanAcceptGameplayInput())
@@ -232,6 +301,35 @@ namespace TapMiner.Core
             }
 
             return laneTransitionController.TryStartTransition(direction);
+        }
+
+        private bool TryProcessCurrentSegment()
+        {
+            if (!runStateMachine.CanAcceptGameplayInput() || laneTransitionController.IsTransitioning)
+            {
+                return false;
+            }
+
+            if (!HasValidActiveSegment())
+            {
+                NotifyRunInvalidFailure();
+                return false;
+            }
+
+            if (breakableBlockResolutionSystem.HasBreakableTargetAt(debugActiveSegmentIndex, CurrentCommittedLaneIndex))
+            {
+                return TryResolveBreakAtLane(CurrentCommittedLaneIndex) == BreakResolutionResult.BreakSucceeded &&
+                       AdvanceToNextSegment();
+            }
+
+            var currentSegment = segmentSpawnSystem.SpawnedSegments[debugActiveSegmentIndex];
+            if (currentSegment.HazardLaneMask[CurrentCommittedLaneIndex])
+            {
+                return TryResolveHazardAtLaneInternal(CurrentCommittedLaneIndex) ==
+                       HazardContactResult.HazardContactResolved;
+            }
+
+            return AdvanceToNextSegment();
         }
 
         private BreakResolutionResult TryResolveBreakAtLane(int laneIndex)
@@ -270,6 +368,80 @@ namespace TapMiner.Core
             return hazardResult;
         }
 
+        private bool AdvanceToNextSegment()
+        {
+            if (!HasValidActiveSegment())
+            {
+                NotifyRunInvalidFailure();
+                return false;
+            }
+
+            debugLastCompletedSegmentIndex = debugActiveSegmentIndex;
+            debugCompletedSegmentCount += 1;
+            debugActiveSegmentIndex += 1;
+
+            if (debugActiveSegmentIndex >= segmentSpawnSystem.SpawnedSegments.Count)
+            {
+                NotifyRunInvalidFailure();
+                SyncDebugState();
+                return false;
+            }
+
+            SyncDebugState();
+            return true;
+        }
+
+        private bool HasValidActiveSegment()
+        {
+            return debugActiveSegmentIndex >= 0 &&
+                   debugActiveSegmentIndex < segmentSpawnSystem.SpawnedSegments.Count;
+        }
+
+        private void ProcessDebugCommands()
+        {
+            if (debugRequestStartRun)
+            {
+                debugRequestStartRun = false;
+                RequestStartRun();
+            }
+
+            if (debugRequestRestartRun)
+            {
+                debugRequestRestartRun = false;
+                RequestRestartRun();
+            }
+
+            if (debugRequestLaneLeft)
+            {
+                debugRequestLaneLeft = false;
+                RequestLaneTransitionLeft();
+            }
+
+            if (debugRequestLaneRight)
+            {
+                debugRequestLaneRight = false;
+                RequestLaneTransitionRight();
+            }
+
+            if (debugRequestBreakCurrentLaneTarget)
+            {
+                debugRequestBreakCurrentLaneTarget = false;
+                RequestBreakCurrentLaneTarget();
+            }
+
+            if (debugRequestResolveCurrentLaneHazardContact)
+            {
+                debugRequestResolveCurrentLaneHazardContact = false;
+                RequestResolveCurrentLaneHazardContact();
+            }
+
+            if (debugRequestProcessCurrentSegment)
+            {
+                debugRequestProcessCurrentSegment = false;
+                RequestProcessCurrentSegment();
+            }
+        }
+
         private void HandleStateChanged(RunState previousState, RunState newState)
         {
             if (newState == RunState.RunRestarting)
@@ -277,8 +449,11 @@ namespace TapMiner.Core
                 laneTransitionController.ResetForNewRun();
                 segmentSpawnSystem.ResetForRun();
                 breakableBlockResolutionSystem.ResetForRun(segmentSpawnSystem.SpawnedSegments);
+                lootDropResolutionSystem.ResetForRun(CurrentRunContextId);
                 hazardContactResolutionSystem.ResetForRun(CurrentRunContextId, segmentSpawnSystem.SpawnedSegments);
                 debugActiveSegmentIndex = 0;
+                debugCompletedSegmentCount = 0;
+                debugLastCompletedSegmentIndex = -1;
             }
             else if (newState != RunState.RunActive)
             {
@@ -288,7 +463,11 @@ namespace TapMiner.Core
             if (newState == RunState.RunActive && previousState != RunState.RunActive)
             {
                 lootDropResolutionSystem.ResetForRun(CurrentRunContextId);
+                breakableBlockResolutionSystem.ResetForRun(segmentSpawnSystem.SpawnedSegments);
                 hazardContactResolutionSystem.ResetForRun(CurrentRunContextId, segmentSpawnSystem.SpawnedSegments);
+                debugActiveSegmentIndex = 0;
+                debugCompletedSegmentCount = 0;
+                debugLastCompletedSegmentIndex = -1;
             }
 
             SyncDebugState();
