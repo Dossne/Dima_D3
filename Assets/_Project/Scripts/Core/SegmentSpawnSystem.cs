@@ -41,16 +41,38 @@ namespace TapMiner.Core
             var rewardLaneIndex = hasRewardPath ? ResolveRewardLaneIndex(segmentIndex, safeLaneIndex) : -1;
             var hazardMask = ResolveHazardLaneMask(segmentType, safeLaneIndex, hasRewardPath, rewardLaneIndex);
             var breakableMask = ResolveBreakableLaneMask(hazardMask, safeLaneIndex);
+            var variationProfile = SegmentContentVariationSetA.Resolve(
+                segmentIndex,
+                bucket,
+                segmentType,
+                safeLaneIndex,
+                hasRewardPath);
 
             return new SegmentDescriptor(
                 segmentIndex,
                 bucket,
                 segmentType,
+                variationProfile.VariationId,
+                variationProfile.SafePathPresentation,
+                variationProfile.RewardPresentation,
+                variationProfile.HazardPresentation,
                 safeLaneIndex,
                 hasRewardPath,
                 rewardLaneIndex,
                 hazardMask,
                 breakableMask);
+        }
+
+        public int GetUniqueVariationCount()
+        {
+            var uniqueVariations = new HashSet<SegmentVariationId>();
+
+            for (var index = 0; index < spawnedSegments.Count; index += 1)
+            {
+                uniqueVariations.Add(spawnedSegments[index].VariationId);
+            }
+
+            return uniqueVariations.Count;
         }
 
         private static DepthBucket ResolveDepthBucket(int segmentIndex)

@@ -83,6 +83,20 @@ namespace TapMiner.EditorTools
             Debug.Log("[CoreLoopSmokeRunner] Requested play mode for T014 smoke.");
         }
 
+        [MenuItem("Tools/Tap Miner/Run T015 Variation Smoke")]
+        public static void RunT015VariationSmoke()
+        {
+            if (IsRunning())
+            {
+                Debug.LogWarning("[CoreLoopSmokeRunner] Smoke run is already active.");
+                return;
+            }
+
+            SetRunning(true);
+            EditorApplication.isPlaying = true;
+            Debug.Log("[CoreLoopSmokeRunner] Requested play mode for T015 smoke.");
+        }
+
         private static void HandlePlayModeStateChanged(PlayModeStateChange state)
         {
             if (!IsRunning())
@@ -311,6 +325,20 @@ namespace TapMiner.EditorTools
                 var result = bootstrap.RequestProcessCurrentSegment();
                 Debug.Log(
                     $"[CoreLoopSmokeRunner] T014 third run process -> {result} | Break={bootstrap.LastBreakResolutionResult} | Loot={bootstrap.LastLootResolutionResult} | MissionBreak={FormatMission(bootstrap, MissionTemplateId.BreakBlocks)} | MissionSegments={FormatMission(bootstrap, MissionTemplateId.CompleteSegments)} | MissionSoft={FormatMission(bootstrap, MissionTemplateId.EarnSoft)} | LastMissionReward={bootstrap.LastGrantedMissionReward} | TotalMissionRewards={bootstrap.TotalMissionRewardsGranted} | Balance={bootstrap.SoftCurrencyBalance}");
+            }));
+
+            Steps.Enqueue(new SmokeStep("Report T015 variation count", bootstrap => bootstrap.CurrentRunState == RunState.RunActive, 0.1d, bootstrap =>
+            {
+                Debug.Log(
+                    $"[CoreLoopSmokeRunner] T015 variation count -> UniqueVariations={bootstrap.CurrentUniqueSegmentVariationCount} | SegmentCount={bootstrap.CurrentSpawnedSegmentCount}");
+            }));
+
+            Steps.Enqueue(new SmokeStep("Report T015 segment set A", bootstrap => bootstrap.CurrentRunState == RunState.RunActive, 0.1d, bootstrap =>
+            {
+                for (var index = 0; index < bootstrap.CurrentSpawnedSegmentCount; index += 1)
+                {
+                    Debug.Log($"[CoreLoopSmokeRunner] T015 segment summary -> {bootstrap.GetSegmentSummary(index)}");
+                }
             }));
         }
 

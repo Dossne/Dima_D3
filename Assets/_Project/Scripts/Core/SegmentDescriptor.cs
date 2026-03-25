@@ -12,6 +12,10 @@ namespace TapMiner.Core
             int segmentIndex,
             DepthBucket depthBucket,
             SegmentType segmentType,
+            SegmentVariationId variationId,
+            string safePathPresentation,
+            string rewardPresentation,
+            string hazardPresentation,
             int safeLaneIndex,
             bool hasRewardPath,
             int rewardLaneIndex,
@@ -21,6 +25,10 @@ namespace TapMiner.Core
             SegmentIndex = segmentIndex;
             DepthBucket = depthBucket;
             SegmentType = segmentType;
+            VariationId = variationId;
+            SafePathPresentation = safePathPresentation;
+            RewardPresentation = rewardPresentation;
+            HazardPresentation = hazardPresentation;
             SafeLaneIndex = safeLaneIndex;
             HasRewardPath = hasRewardPath;
             RewardLaneIndex = rewardLaneIndex;
@@ -31,6 +39,10 @@ namespace TapMiner.Core
         public int SegmentIndex { get; }
         public DepthBucket DepthBucket { get; }
         public SegmentType SegmentType { get; }
+        public SegmentVariationId VariationId { get; }
+        public string SafePathPresentation { get; }
+        public string RewardPresentation { get; }
+        public string HazardPresentation { get; }
         public int SafeLaneIndex { get; }
         public bool HasRewardPath { get; }
         public int RewardLaneIndex { get; }
