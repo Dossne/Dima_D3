@@ -40,6 +40,7 @@ namespace TapMiner.Core
             var hasRewardPath = ResolveRewardPath(segmentIndex, segmentType);
             var rewardLaneIndex = hasRewardPath ? ResolveRewardLaneIndex(segmentIndex, safeLaneIndex) : -1;
             var hazardMask = ResolveHazardLaneMask(segmentType, safeLaneIndex, hasRewardPath, rewardLaneIndex);
+            var breakableMask = ResolveBreakableLaneMask(hazardMask, safeLaneIndex);
 
             return new SegmentDescriptor(
                 segmentIndex,
@@ -48,7 +49,8 @@ namespace TapMiner.Core
                 safeLaneIndex,
                 hasRewardPath,
                 rewardLaneIndex,
-                hazardMask);
+                hazardMask,
+                breakableMask);
         }
 
         private static DepthBucket ResolveDepthBucket(int segmentIndex)
@@ -197,6 +199,18 @@ namespace TapMiner.Core
             return hazardMask;
         }
 
+        private static bool[] ResolveBreakableLaneMask(bool[] hazardMask, int safeLaneIndex)
+        {
+            var breakableMask = new bool[hazardMask.Length];
+
+            for (var laneIndex = 0; laneIndex < hazardMask.Length; laneIndex += 1)
+            {
+                breakableMask[laneIndex] = laneIndex != safeLaneIndex && hazardMask[laneIndex];
+            }
+
+            return breakableMask;
+        }
+
         private static void ApplySingleHazardCluster(bool[] hazardMask, int safeLaneIndex, int rewardLaneIndex)
         {
             for (var laneIndex = 0; laneIndex < hazardMask.Length; laneIndex += 1)
@@ -221,6 +235,11 @@ namespace TapMiner.Core
             if (descriptor.HasHazardOnSafeLane)
             {
                 throw new InvalidOperationException("Spawned segment violates safe path guarantee.");
+            }
+
+            if (descriptor.HasBreakableOnSafeLane)
+            {
+                throw new InvalidOperationException("Breakable target cannot exist on the safe lane.");
             }
 
             if (descriptor.HasRewardPath)
@@ -261,6 +280,14 @@ namespace TapMiner.Core
 
                 case SegmentType.S3_HazardPressure:
                     break;
+            }
+
+            for (var laneIndex = 0; laneIndex < descriptor.BreakableLaneMask.Length; laneIndex += 1)
+            {
+                if (descriptor.BreakableLaneMask[laneIndex] && !descriptor.HazardLaneMask[laneIndex])
+                {
+                    throw new InvalidOperationException("Breakable target must map to a legal hazard lane.");
+                }
             }
         }
 

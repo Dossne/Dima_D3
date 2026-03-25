@@ -54,10 +54,24 @@ namespace TapMiner.Core
         [SerializeField]
         private int debugFirstSegmentSafeLaneIndex;
 
+        [Header("Break Runtime")]
+        [SerializeField]
+        private int debugActiveSegmentIndex;
+
+        [SerializeField]
+        private int debugCurrentSegmentBreakableTargetCount;
+
+        [SerializeField]
+        private BreakResolutionResult debugLastBreakResolutionResult;
+
+        [SerializeField]
+        private int debugSuccessfulBreakCount;
+
         private RunStateMachine runStateMachine = null!;
         private SwipeInputInterpreter swipeInputInterpreter = null!;
         private LaneTransitionController laneTransitionController = null!;
         private SegmentSpawnSystem segmentSpawnSystem = null!;
+        private BreakableBlockResolutionSystem breakableBlockResolutionSystem = null!;
 
         public RunState CurrentRunState => runStateMachine.CurrentState;
         public int CurrentRunContextId => runStateMachine.CurrentRunContextId;
@@ -67,6 +81,7 @@ namespace TapMiner.Core
         public int CurrentCommittedLaneIndex => laneTransitionController.CommittedLaneIndex;
         public bool IsLaneTransitioning => laneTransitionController.IsTransitioning;
         public int CurrentSpawnedSegmentCount => segmentSpawnSystem.SpawnedSegments.Count;
+        public BreakResolutionResult LastBreakResolutionResult => breakableBlockResolutionSystem.LastResolutionResult;
 
         private void Awake()
         {
@@ -79,7 +94,9 @@ namespace TapMiner.Core
                 laneTransitionDurationSeconds,
                 initialLaneIndex);
             segmentSpawnSystem = new SegmentSpawnSystem(initialSegmentBatchCount);
+            breakableBlockResolutionSystem = new BreakableBlockResolutionSystem();
             segmentSpawnSystem.ResetForRun();
+            breakableBlockResolutionSystem.ResetForRun(segmentSpawnSystem.SpawnedSegments);
 
             SyncDebugState();
 
@@ -138,6 +155,16 @@ namespace TapMiner.Core
             return HandleMovementSwipe(1);
         }
 
+        public BreakResolutionResult RequestBreakCurrentLaneTarget()
+        {
+            return TryResolveBreakAtLane(CurrentCommittedLaneIndex);
+        }
+
+        public BreakResolutionResult RequestBreakLane(int laneIndex)
+        {
+            return TryResolveBreakAtLane(laneIndex);
+        }
+
         private bool TryCommand(string commandName, System.Func<bool> command)
         {
             var previousState = CurrentRunState;
@@ -161,12 +188,26 @@ namespace TapMiner.Core
             return laneTransitionController.TryStartTransition(direction);
         }
 
+        private BreakResolutionResult TryResolveBreakAtLane(int laneIndex)
+        {
+            var result = breakableBlockResolutionSystem.TryResolveBreak(
+                debugActiveSegmentIndex,
+                laneIndex,
+                CurrentCommittedLaneIndex,
+                runStateMachine.CanAcceptGameplayInput());
+
+            SyncDebugState();
+            return result;
+        }
+
         private void HandleStateChanged(RunState previousState, RunState newState)
         {
             if (newState == RunState.RunRestarting)
             {
                 laneTransitionController.ResetForNewRun();
                 segmentSpawnSystem.ResetForRun();
+                breakableBlockResolutionSystem.ResetForRun(segmentSpawnSystem.SpawnedSegments);
+                debugActiveSegmentIndex = 0;
             }
             else if (newState != RunState.RunActive)
             {
@@ -199,6 +240,10 @@ namespace TapMiner.Core
             debugFirstSegmentType = firstSegment.SegmentType;
             debugFirstSegmentDepthBucket = firstSegment.DepthBucket;
             debugFirstSegmentSafeLaneIndex = firstSegment.SafeLaneIndex;
+            debugCurrentSegmentBreakableTargetCount =
+                breakableBlockResolutionSystem.GetRemainingBreakableTargetCount(debugActiveSegmentIndex);
+            debugLastBreakResolutionResult = breakableBlockResolutionSystem.LastResolutionResult;
+            debugSuccessfulBreakCount = breakableBlockResolutionSystem.SuccessfulBreakCount;
         }
     }
 }
