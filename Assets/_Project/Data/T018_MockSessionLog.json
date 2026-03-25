@@ -1,13 +1,13 @@
 {
-    "SessionId": "T018-20260325T225406Z",
+    "SessionId": "T018-20260325T230134Z",
     "SchemaVersion": "T018.v1",
-    "GeneratedAtUtc": "2026-03-25T22:54:12.8816441Z",
+    "GeneratedAtUtc": "2026-03-25T23:01:40.2133783Z",
     "EventCount": 10,
     "Events": [
         {
             "EventType": "RunStart",
             "RunContextId": 1,
-            "SessionTimeSeconds": 4.482438087463379,
+            "SessionTimeSeconds": 4.2035346031188969,
             "Depth": 0,
             "SegmentIndex": -1,
             "LaneIndex": 1,
@@ -25,7 +25,7 @@
         {
             "EventType": "LaneInput",
             "RunContextId": 1,
-            "SessionTimeSeconds": 4.684657096862793,
+            "SessionTimeSeconds": 4.407217502593994,
             "Depth": 0,
             "SegmentIndex": -1,
             "LaneIndex": 0,
@@ -43,7 +43,7 @@
         {
             "EventType": "BlockBreak",
             "RunContextId": 1,
-            "SessionTimeSeconds": 4.8979034423828129,
+            "SessionTimeSeconds": 4.625485897064209,
             "Depth": 1,
             "SegmentIndex": 0,
             "LaneIndex": 0,
@@ -61,7 +61,7 @@
         {
             "EventType": "LaneInput",
             "RunContextId": 1,
-            "SessionTimeSeconds": 5.1019744873046879,
+            "SessionTimeSeconds": 4.829295635223389,
             "Depth": 1,
             "SegmentIndex": -1,
             "LaneIndex": 1,
@@ -79,7 +79,7 @@
         {
             "EventType": "LaneInput",
             "RunContextId": 1,
-            "SessionTimeSeconds": 5.311697006225586,
+            "SessionTimeSeconds": 5.0440850257873539,
             "Depth": 1,
             "SegmentIndex": -1,
             "LaneIndex": 2,
@@ -97,7 +97,7 @@
         {
             "EventType": "DamageTaken",
             "RunContextId": 1,
-            "SessionTimeSeconds": 5.520811080932617,
+            "SessionTimeSeconds": 5.261459827423096,
             "Depth": 2,
             "SegmentIndex": 1,
             "LaneIndex": 2,
@@ -115,7 +115,7 @@
         {
             "EventType": "Death",
             "RunContextId": 1,
-            "SessionTimeSeconds": 5.521039962768555,
+            "SessionTimeSeconds": 5.261817455291748,
             "Depth": 1,
             "SegmentIndex": -1,
             "LaneIndex": -1,
@@ -133,7 +133,7 @@
         {
             "EventType": "RunResults",
             "RunContextId": 1,
-            "SessionTimeSeconds": 5.521655082702637,
+            "SessionTimeSeconds": 5.262841701507568,
             "Depth": 2,
             "SegmentIndex": -1,
             "LaneIndex": -1,
@@ -143,7 +143,7 @@
             "RemainingHealth": -1,
             "MaxHealth": -1,
             "RestartTargetRunContextId": -1,
-            "RunDurationSeconds": 1.038595199584961,
+            "RunDurationSeconds": 1.058274269104004,
             "RestartLatencySeconds": -1.0,
             "DeathCause": "HazardContact",
             "Detail": "run_summary"
@@ -151,7 +151,7 @@
         {
             "EventType": "UpgradePurchase",
             "RunContextId": 0,
-            "SessionTimeSeconds": 5.725739479064941,
+            "SessionTimeSeconds": 5.470098972320557,
             "Depth": 0,
             "SegmentIndex": -1,
             "LaneIndex": -1,
@@ -169,7 +169,7 @@
         {
             "EventType": "RestartPressed",
             "RunContextId": 1,
-            "SessionTimeSeconds": 5.962275505065918,
+            "SessionTimeSeconds": 5.68679666519165,
             "Depth": 2,
             "SegmentIndex": -1,
             "LaneIndex": -1,
@@ -180,7 +180,7 @@
             "MaxHealth": -1,
             "RestartTargetRunContextId": 2,
             "RunDurationSeconds": -1.0,
-            "RestartLatencySeconds": 0.4412422180175781,
+            "RestartLatencySeconds": 0.42498779296875,
             "DeathCause": "HazardContact",
             "Detail": "restart_pressed"
         }
@@ -188,13 +188,13 @@
     "CompletedRuns": [
         {
             "RunContextId": 1,
-            "StartedAtSessionSeconds": 4.482438087463379,
-            "EndedAtSessionSeconds": 5.52103328704834,
-            "DurationSeconds": 1.038595199584961,
+            "StartedAtSessionSeconds": 4.2035346031188969,
+            "EndedAtSessionSeconds": 5.2618088722229,
+            "DurationSeconds": 1.058274269104004,
             "Depth": 2,
             "DeathCause": "HazardContact",
             "TotalRewardsGranted": 6,
-            "RestartLatencySeconds": 0.4412422180175781
+            "RestartLatencySeconds": 0.42498779296875
         }
     ]
 }
