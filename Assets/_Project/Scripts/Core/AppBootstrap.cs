@@ -162,6 +162,25 @@ namespace TapMiner.Core
         [SerializeField]
         private float debugAppliedCollapseCatchRateMultiplier = 1f;
 
+        [Header("Mission Runtime")]
+        [SerializeField]
+        private string debugBreakMission = string.Empty;
+
+        [SerializeField]
+        private string debugSegmentMission = string.Empty;
+
+        [SerializeField]
+        private string debugEarnSoftMission = string.Empty;
+
+        [SerializeField]
+        private MissionTemplateId debugLastCompletedMissionTemplate;
+
+        [SerializeField]
+        private int debugLastGrantedMissionReward;
+
+        [SerializeField]
+        private int debugTotalMissionRewardsGranted;
+
         [Header("Loop Runtime")]
         [SerializeField]
         private int debugCompletedSegmentCount;
@@ -179,6 +198,7 @@ namespace TapMiner.Core
         private HazardContactResolutionSystem hazardContactResolutionSystem = null!;
         private UpgradePersistenceSystem upgradePersistenceSystem = null!;
         private RunHealthSystem runHealthSystem = null!;
+        private MissionLayerLiteSystem missionLayerLiteSystem = null!;
 
         public RunState CurrentRunState => runStateMachine.CurrentState;
         public int CurrentRunContextId => runStateMachine.CurrentRunContextId;
@@ -197,6 +217,8 @@ namespace TapMiner.Core
         public int CurrentRunMaxHealth => runHealthSystem.MaxHealth;
         public UpgradeStatsSnapshot CurrentUpgradeStats => upgradePersistenceSystem.CurrentStats;
         public float CurrentLaneTransitionDurationSeconds => laneTransitionController.CurrentTransitionDurationSeconds;
+        public int LastGrantedMissionReward => missionLayerLiteSystem.LastGrantedRewardValue;
+        public int TotalMissionRewardsGranted => missionLayerLiteSystem.TotalMissionRewardsGranted;
 
         private void Awake()
         {
@@ -205,6 +227,7 @@ namespace TapMiner.Core
             swipeInputInterpreter = new SwipeInputInterpreter(minimumSwipeDistancePixels);
             upgradePersistenceSystem = new UpgradePersistenceSystem();
             runHealthSystem = new RunHealthSystem();
+            missionLayerLiteSystem = new MissionLayerLiteSystem();
             laneTransitionController = new LaneTransitionController(
                 transform,
                 laneLocalPositions,
@@ -343,6 +366,11 @@ namespace TapMiner.Core
             SyncDebugState();
         }
 
+        public MissionProgress GetMission(MissionTemplateId templateId)
+        {
+            return missionLayerLiteSystem.GetMission(templateId);
+        }
+
         public HazardContactResult RequestResolveCurrentLaneHazardContact()
         {
             return TryResolveHazardAtLaneInternal(CurrentCommittedLaneIndex);
@@ -376,6 +404,12 @@ namespace TapMiner.Core
         public void DebugGrantSoftCurrencyForValidation(int amount)
         {
             upgradePersistenceSystem.DebugGrantSoftCurrency(amount);
+            SyncDebugState();
+        }
+
+        public void DebugResetMissionProgressForValidation()
+        {
+            missionLayerLiteSystem.DebugResetAllProgress();
             SyncDebugState();
         }
 #endif
@@ -466,6 +500,17 @@ namespace TapMiner.Core
                 lootDropResolutionSystem.LastResolutionResult,
                 lootDropResolutionSystem.LastGrantedLoot);
 
+            if (breakResult == BreakResolutionResult.BreakSucceeded)
+            {
+                ApplyMissionReward(missionLayerLiteSystem.RecordBreakSuccess());
+            }
+
+            if (lootDropResolutionSystem.LastResolutionResult == LootResolutionResult.LootGranted &&
+                lootDropResolutionSystem.LastGrantedLoot != null)
+            {
+                ApplyMissionReward(missionLayerLiteSystem.RecordSoftEarned(lootDropResolutionSystem.LastGrantedLoot.LootValue));
+            }
+
             SyncDebugState();
             return breakResult;
         }
@@ -507,6 +552,7 @@ namespace TapMiner.Core
             debugLastCompletedSegmentIndex = debugActiveSegmentIndex;
             debugCompletedSegmentCount += 1;
             debugActiveSegmentIndex += 1;
+            ApplyMissionReward(missionLayerLiteSystem.RecordSegmentCompleted());
 
             if (debugActiveSegmentIndex >= segmentSpawnSystem.SpawnedSegments.Count)
             {
@@ -663,6 +709,12 @@ namespace TapMiner.Core
             debugAppliedLaneTransitionDurationSeconds = laneTransitionController.CurrentTransitionDurationSeconds;
             debugAppliedLootValueMultiplier = lootDropResolutionSystem.LootValueMultiplier;
             debugAppliedCollapseCatchRateMultiplier = hazardContactResolutionSystem.CollapseCatchRateMultiplier;
+            debugBreakMission = FormatMissionDebug(missionLayerLiteSystem.GetMission(MissionTemplateId.BreakBlocks));
+            debugSegmentMission = FormatMissionDebug(missionLayerLiteSystem.GetMission(MissionTemplateId.CompleteSegments));
+            debugEarnSoftMission = FormatMissionDebug(missionLayerLiteSystem.GetMission(MissionTemplateId.EarnSoft));
+            debugLastCompletedMissionTemplate = missionLayerLiteSystem.LastCompletedTemplateId;
+            debugLastGrantedMissionReward = missionLayerLiteSystem.LastGrantedRewardValue;
+            debugTotalMissionRewardsGranted = missionLayerLiteSystem.TotalMissionRewardsGranted;
         }
 
         private void ApplyUpgradeStatsToRuntime()
@@ -677,6 +729,21 @@ namespace TapMiner.Core
         private void ResetHealthForCurrentRun()
         {
             runHealthSystem.ResetForRun(CurrentUpgradeStats.MaxHealth);
+        }
+
+        private void ApplyMissionReward(int rewardValue)
+        {
+            if (rewardValue <= 0)
+            {
+                return;
+            }
+
+            upgradePersistenceSystem.BankReward(rewardValue);
+        }
+
+        private static string FormatMissionDebug(MissionProgress missionProgress)
+        {
+            return $"{missionProgress.Definition.DisplayName}: {missionProgress.CurrentValue}/{missionProgress.Definition.TargetValue} | Reward={missionProgress.Definition.RewardValue}";
         }
     }
 }

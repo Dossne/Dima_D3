@@ -69,6 +69,20 @@ namespace TapMiner.EditorTools
             Debug.Log("[CoreLoopSmokeRunner] Requested play mode for T013 smoke.");
         }
 
+        [MenuItem("Tools/Tap Miner/Run T014 Mission Smoke")]
+        public static void RunT014MissionSmoke()
+        {
+            if (IsRunning())
+            {
+                Debug.LogWarning("[CoreLoopSmokeRunner] Smoke run is already active.");
+                return;
+            }
+
+            SetRunning(true);
+            EditorApplication.isPlaying = true;
+            Debug.Log("[CoreLoopSmokeRunner] Requested play mode for T014 smoke.");
+        }
+
         private static void HandlePlayModeStateChanged(PlayModeStateChange state)
         {
             if (!IsRunning())
@@ -133,8 +147,11 @@ namespace TapMiner.EditorTools
             Steps.Enqueue(new SmokeStep("Reset T012 validation progress", bootstrap => true, 0.2d, bootstrap =>
             {
                 bootstrap.DebugResetUpgradeProgressForValidation();
+                bootstrap.DebugResetMissionProgressForValidation();
                 Debug.Log(
                     $"[CoreLoopSmokeRunner] T012 reset -> Balance={bootstrap.SoftCurrencyBalance} | HP={bootstrap.CurrentRunMaxHealth} | MoveDuration={bootstrap.CurrentUpgradeStats.LaneTransitionDurationMultiplier:0.00} | LootMultiplier={bootstrap.CurrentUpgradeStats.LootValueMultiplier:0.00} | BreakMultiplier={bootstrap.CurrentUpgradeStats.BlockBreakSpeedMultiplier:0.00} | CollapseMultiplier={bootstrap.CurrentUpgradeStats.CollapseCatchRateMultiplier:0.00}");
+                Debug.Log(
+                    $"[CoreLoopSmokeRunner] T014 missions -> Break={FormatMission(bootstrap, MissionTemplateId.BreakBlocks)} | Segments={FormatMission(bootstrap, MissionTemplateId.CompleteSegments)} | Soft={FormatMission(bootstrap, MissionTemplateId.EarnSoft)}");
             }));
 
             Steps.Enqueue(new SmokeStep("Start run", bootstrap => true, 0.2d, bootstrap =>
@@ -262,6 +279,39 @@ namespace TapMiner.EditorTools
                         $"[CoreLoopSmokeRunner] T013 cost table | Upgrade={definition.DisplayName} | Costs={string.Join(",", definition.LevelCosts)}");
                 }
             }));
+
+            Steps.Enqueue(new SmokeStep("Report T014 mission progress after two runs", bootstrap => bootstrap.CurrentRunState == RunState.RunActive, 0.1d, bootstrap =>
+            {
+                Debug.Log(
+                    $"[CoreLoopSmokeRunner] T014 mission progress -> Break={FormatMission(bootstrap, MissionTemplateId.BreakBlocks)} | Segments={FormatMission(bootstrap, MissionTemplateId.CompleteSegments)} | Soft={FormatMission(bootstrap, MissionTemplateId.EarnSoft)} | LastReward={bootstrap.LastGrantedMissionReward} | TotalMissionRewards={bootstrap.TotalMissionRewardsGranted} | Balance={bootstrap.SoftCurrencyBalance}");
+            }));
+
+            Steps.Enqueue(new SmokeStep("Force end upgraded run for T014", bootstrap => bootstrap.CurrentRunState == RunState.RunActive, 0.2d, bootstrap =>
+            {
+                var killed = bootstrap.NotifyLethalDamage();
+                Debug.Log($"[CoreLoopSmokeRunner] T014 force death -> {killed} | RunState={bootstrap.CurrentRunState}");
+            }));
+
+            Steps.Enqueue(new SmokeStep("Restart for T014 third run", bootstrap => bootstrap.CurrentRunState == RunState.RunDeathResolved, 0.2d, bootstrap =>
+            {
+                var restarted = bootstrap.RequestRestartRun();
+                Debug.Log(
+                    $"[CoreLoopSmokeRunner] T014 restart third run -> {restarted} | Context={bootstrap.CurrentRunContextId} | Break={FormatMission(bootstrap, MissionTemplateId.BreakBlocks)} | Segments={FormatMission(bootstrap, MissionTemplateId.CompleteSegments)} | Soft={FormatMission(bootstrap, MissionTemplateId.EarnSoft)}");
+            }));
+
+            Steps.Enqueue(new SmokeStep("Move to break lane on T014 third run", bootstrap => bootstrap.CurrentRunState == RunState.RunActive && !bootstrap.IsLaneTransitioning, 0.2d, bootstrap =>
+            {
+                var result = bootstrap.RequestLaneTransitionLeft();
+                bootstrap.DebugAdvanceRuntimeLoop(0.12f);
+                Debug.Log($"[CoreLoopSmokeRunner] T014 move left third run -> {result} | Lane={bootstrap.CurrentCommittedLaneIndex}");
+            }));
+
+            Steps.Enqueue(new SmokeStep("Process T014 third run segment", bootstrap => bootstrap.CurrentRunState == RunState.RunActive && !bootstrap.IsLaneTransitioning && bootstrap.CurrentCommittedLaneIndex == 0, 0.2d, bootstrap =>
+            {
+                var result = bootstrap.RequestProcessCurrentSegment();
+                Debug.Log(
+                    $"[CoreLoopSmokeRunner] T014 third run process -> {result} | Break={bootstrap.LastBreakResolutionResult} | Loot={bootstrap.LastLootResolutionResult} | MissionBreak={FormatMission(bootstrap, MissionTemplateId.BreakBlocks)} | MissionSegments={FormatMission(bootstrap, MissionTemplateId.CompleteSegments)} | MissionSoft={FormatMission(bootstrap, MissionTemplateId.EarnSoft)} | LastMissionReward={bootstrap.LastGrantedMissionReward} | TotalMissionRewards={bootstrap.TotalMissionRewardsGranted} | Balance={bootstrap.SoftCurrencyBalance}");
+            }));
         }
 
         private static void StopRunner()
@@ -284,6 +334,12 @@ namespace TapMiner.EditorTools
         private static void SetRunning(bool value)
         {
             SessionState.SetBool(SessionKey, value);
+        }
+
+        private static string FormatMission(AppBootstrap bootstrap, MissionTemplateId templateId)
+        {
+            var mission = bootstrap.GetMission(templateId);
+            return $"{mission.Definition.Description} {mission.CurrentValue}/{mission.Definition.TargetValue} reward={mission.Definition.RewardValue}";
         }
 
         private readonly struct SmokeStep
