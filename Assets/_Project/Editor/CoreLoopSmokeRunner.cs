@@ -41,6 +41,20 @@ namespace TapMiner.EditorTools
             Debug.Log("[CoreLoopSmokeRunner] Requested play mode for T010 smoke.");
         }
 
+        [MenuItem("Tools/Tap Miner/Run T012 Upgrade Smoke")]
+        public static void RunT012UpgradeSmoke()
+        {
+            if (IsRunning())
+            {
+                Debug.LogWarning("[CoreLoopSmokeRunner] Smoke run is already active.");
+                return;
+            }
+
+            SetRunning(true);
+            EditorApplication.isPlaying = true;
+            Debug.Log("[CoreLoopSmokeRunner] Requested play mode for T012 smoke.");
+        }
+
         private static void HandlePlayModeStateChanged(PlayModeStateChange state)
         {
             if (!IsRunning())
@@ -102,6 +116,13 @@ namespace TapMiner.EditorTools
         private static void EnqueueSteps()
         {
             Steps.Clear();
+            Steps.Enqueue(new SmokeStep("Reset T012 validation progress", bootstrap => true, 0.2d, bootstrap =>
+            {
+                bootstrap.DebugResetUpgradeProgressForValidation();
+                Debug.Log(
+                    $"[CoreLoopSmokeRunner] T012 reset -> Balance={bootstrap.SoftCurrencyBalance} | HP={bootstrap.CurrentRunMaxHealth} | MoveDuration={bootstrap.CurrentUpgradeStats.LaneTransitionDurationMultiplier:0.00} | LootMultiplier={bootstrap.CurrentUpgradeStats.LootValueMultiplier:0.00} | BreakMultiplier={bootstrap.CurrentUpgradeStats.BlockBreakSpeedMultiplier:0.00} | CollapseMultiplier={bootstrap.CurrentUpgradeStats.CollapseCatchRateMultiplier:0.00}");
+            }));
+
             Steps.Enqueue(new SmokeStep("Start run", bootstrap => true, 0.2d, bootstrap =>
             {
                 var result = bootstrap.RequestStartRun();
@@ -145,15 +166,65 @@ namespace TapMiner.EditorTools
 
             Steps.Enqueue(new SmokeStep("Restart run", bootstrap => bootstrap.CurrentRunState == RunState.RunDeathResolved, 0.2d, bootstrap =>
             {
+                bootstrap.DebugGrantSoftCurrencyForValidation(100);
+                Debug.Log($"[CoreLoopSmokeRunner] Grant validation funds -> Balance={bootstrap.SoftCurrencyBalance}");
+                var drill = bootstrap.TryPurchaseUpgrade(UpgradeId.DrillPower);
+                var maxHp = bootstrap.TryPurchaseUpgrade(UpgradeId.MaxHp);
+                var moveSpeed = bootstrap.TryPurchaseUpgrade(UpgradeId.MoveSpeed);
+                var lootValue = bootstrap.TryPurchaseUpgrade(UpgradeId.LootValue);
+                var collapseResistance = bootstrap.TryPurchaseUpgrade(UpgradeId.CollapseResistance);
+                Debug.Log(
+                    $"[CoreLoopSmokeRunner] Purchases -> Drill={drill}/{bootstrap.GetUpgradeLevel(UpgradeId.DrillPower)} | MaxHP={maxHp}/{bootstrap.GetUpgradeLevel(UpgradeId.MaxHp)} | Move={moveSpeed}/{bootstrap.GetUpgradeLevel(UpgradeId.MoveSpeed)} | Loot={lootValue}/{bootstrap.GetUpgradeLevel(UpgradeId.LootValue)} | Collapse={collapseResistance}/{bootstrap.GetUpgradeLevel(UpgradeId.CollapseResistance)} | Balance={bootstrap.SoftCurrencyBalance}");
+                bootstrap.ReloadUpgradeProgress();
+                Debug.Log(
+                    $"[CoreLoopSmokeRunner] Reload progress -> Balance={bootstrap.SoftCurrencyBalance} | Drill={bootstrap.GetUpgradeLevel(UpgradeId.DrillPower)} | MaxHP={bootstrap.GetUpgradeLevel(UpgradeId.MaxHp)} | Move={bootstrap.GetUpgradeLevel(UpgradeId.MoveSpeed)} | Loot={bootstrap.GetUpgradeLevel(UpgradeId.LootValue)} | Collapse={bootstrap.GetUpgradeLevel(UpgradeId.CollapseResistance)}");
                 var result = bootstrap.RequestRestartRun();
                 Debug.Log(
-                    $"[CoreLoopSmokeRunner] Restart run -> {result} | RunState={bootstrap.CurrentRunState} | Context={bootstrap.CurrentRunContextId} | RunReward={bootstrap.CurrentRunRewardResult.TotalRewardValue} | RewardCount={bootstrap.CurrentRunRewardResult.GrantedLootCount}");
+                    $"[CoreLoopSmokeRunner] Restart run -> {result} | RunState={bootstrap.CurrentRunState} | Context={bootstrap.CurrentRunContextId} | RunReward={bootstrap.CurrentRunRewardResult.TotalRewardValue} | RewardCount={bootstrap.CurrentRunRewardResult.GrantedLootCount} | Balance={bootstrap.SoftCurrencyBalance} | MaxHP={bootstrap.CurrentRunMaxHealth} | MoveDuration={bootstrap.CurrentUpgradeStats.LaneTransitionDurationMultiplier:0.00} | LootMultiplier={bootstrap.CurrentUpgradeStats.LootValueMultiplier:0.00} | BreakMultiplier={bootstrap.CurrentUpgradeStats.BlockBreakSpeedMultiplier:0.00} | CollapseMultiplier={bootstrap.CurrentUpgradeStats.CollapseCatchRateMultiplier:0.00}");
+            }));
+
+            Steps.Enqueue(new SmokeStep("Verify upgraded move speed", bootstrap => bootstrap.CurrentRunState == RunState.RunActive && !bootstrap.IsLaneTransitioning, 0.2d, bootstrap =>
+            {
+                var result = bootstrap.RequestLaneTransitionLeft();
+                bootstrap.DebugAdvanceRuntimeLoop(0.12f);
+                Debug.Log(
+                    $"[CoreLoopSmokeRunner] Move after speed upgrade -> {result} | Lane={bootstrap.CurrentCommittedLaneIndex} | Transitioning={bootstrap.IsLaneTransitioning} | DurationSeconds={bootstrap.CurrentLaneTransitionDurationSeconds:0.000}");
+            }));
+
+            Steps.Enqueue(new SmokeStep("Verify upgraded loot value", bootstrap => bootstrap.CurrentRunState == RunState.RunActive && !bootstrap.IsLaneTransitioning, 0.2d, bootstrap =>
+            {
+                var result = bootstrap.RequestProcessCurrentSegment();
+                Debug.Log(
+                    $"[CoreLoopSmokeRunner] Process with loot upgrade -> {result} | Break={bootstrap.LastBreakResolutionResult} | Loot={bootstrap.LastLootResolutionResult} | RunReward={bootstrap.CurrentRunRewardResult.TotalRewardValue} | RewardCount={bootstrap.CurrentRunRewardResult.GrantedLootCount}");
+            }));
+
+            Steps.Enqueue(new SmokeStep("Move to hazard setup center", bootstrap => bootstrap.CurrentRunState == RunState.RunActive && !bootstrap.IsLaneTransitioning, 0.2d, bootstrap =>
+            {
+                var result = bootstrap.RequestLaneTransitionRight();
+                bootstrap.DebugAdvanceRuntimeLoop(0.12f);
+                Debug.Log(
+                    $"[CoreLoopSmokeRunner] Move to hazard setup center -> {result} | Lane={bootstrap.CurrentCommittedLaneIndex} | Transitioning={bootstrap.IsLaneTransitioning}");
+            }));
+
+            Steps.Enqueue(new SmokeStep("Move to hazard lane on next segment", bootstrap => bootstrap.CurrentRunState == RunState.RunActive && !bootstrap.IsLaneTransitioning, 0.2d, bootstrap =>
+            {
+                var result = bootstrap.RequestLaneTransitionRight();
+                bootstrap.DebugAdvanceRuntimeLoop(0.12f);
+                Debug.Log(
+                    $"[CoreLoopSmokeRunner] Move to hazard lane on next segment -> {result} | Lane={bootstrap.CurrentCommittedLaneIndex} | Transitioning={bootstrap.IsLaneTransitioning}");
+            }));
+
+            Steps.Enqueue(new SmokeStep("Verify upgraded hazard survival", bootstrap => bootstrap.CurrentRunState == RunState.RunActive && !bootstrap.IsLaneTransitioning, 0.2d, bootstrap =>
+            {
+                var result = bootstrap.RequestResolveCurrentLaneHazardContact();
+                Debug.Log(
+                    $"[CoreLoopSmokeRunner] Hazard after Max HP upgrade -> {result} | RunState={bootstrap.CurrentRunState} | CurrentHP={bootstrap.CurrentRunHealth} | MaxHP={bootstrap.CurrentRunMaxHealth}");
             }));
 
             Steps.Enqueue(new SmokeStep("Report final state", bootstrap => bootstrap.CurrentRunState == RunState.RunActive && !bootstrap.IsLaneTransitioning, 0.1d, bootstrap =>
             {
                 Debug.Log(
-                    $"[CoreLoopSmokeRunner] Final state | RunState={bootstrap.CurrentRunState} | Lane={bootstrap.CurrentCommittedLaneIndex} | Segments={bootstrap.CurrentSpawnedSegmentCount} | Break={bootstrap.LastBreakResolutionResult} | Loot={bootstrap.LastLootResolutionResult} | Hazard={bootstrap.LastHazardContactResult} | RunReward={bootstrap.CurrentRunRewardResult.TotalRewardValue} | RewardCount={bootstrap.CurrentRunRewardResult.GrantedLootCount}");
+                    $"[CoreLoopSmokeRunner] Final state | RunState={bootstrap.CurrentRunState} | Lane={bootstrap.CurrentCommittedLaneIndex} | Segments={bootstrap.CurrentSpawnedSegmentCount} | Break={bootstrap.LastBreakResolutionResult} | Loot={bootstrap.LastLootResolutionResult} | Hazard={bootstrap.LastHazardContactResult} | RunReward={bootstrap.CurrentRunRewardResult.TotalRewardValue} | RewardCount={bootstrap.CurrentRunRewardResult.GrantedLootCount} | Balance={bootstrap.SoftCurrencyBalance}");
             }));
         }
 

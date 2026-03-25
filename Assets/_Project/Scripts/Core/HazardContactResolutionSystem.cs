@@ -9,12 +9,19 @@ namespace TapMiner.Core
     public sealed class HazardContactResolutionSystem
     {
         private IReadOnlyList<SegmentDescriptor> segmentDescriptors = Array.Empty<SegmentDescriptor>();
+        private float collapseCatchRateMultiplier = 1f;
 
         public int ActiveRunContextId { get; private set; }
         public HazardContactResult LastHazardContactResult { get; private set; }
         public int LastHazardSegmentIndex { get; private set; } = -1;
         public int LastHazardLaneIndex { get; private set; } = -1;
         public int SuccessfulHazardContactCount { get; private set; }
+        public float CollapseCatchRateMultiplier => collapseCatchRateMultiplier;
+
+        public void SetCollapseCatchRateMultiplier(float multiplier)
+        {
+            collapseCatchRateMultiplier = multiplier < 0.1f ? 0.1f : multiplier;
+        }
 
         public void ResetForRun(int runContextId, IReadOnlyList<SegmentDescriptor> spawnedSegments)
         {

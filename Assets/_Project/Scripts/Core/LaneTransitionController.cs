@@ -9,10 +9,11 @@ namespace TapMiner.Core
     {
         private readonly Transform hostTransform;
         private readonly Vector3[] laneLocalPositions;
-        private readonly float transitionDurationSeconds;
+        private readonly float baseTransitionDurationSeconds;
         private readonly int initialLaneIndex;
 
         private float transitionElapsedSeconds;
+        private float transitionDurationMultiplier = 1f;
         private int targetLaneIndex;
 
         public int CurrentLaneIndex { get; private set; }
@@ -20,6 +21,7 @@ namespace TapMiner.Core
         public int SourceLaneIndex { get; private set; }
         public int TargetLaneIndex => targetLaneIndex;
         public bool IsTransitioning { get; private set; }
+        public float CurrentTransitionDurationSeconds => baseTransitionDurationSeconds * transitionDurationMultiplier;
 
         public LaneTransitionController(
             Transform hostTransform,
@@ -29,10 +31,15 @@ namespace TapMiner.Core
         {
             this.hostTransform = hostTransform;
             this.laneLocalPositions = laneLocalPositions;
-            this.transitionDurationSeconds = Mathf.Max(0.01f, transitionDurationSeconds);
+            baseTransitionDurationSeconds = Mathf.Max(0.01f, transitionDurationSeconds);
             this.initialLaneIndex = Mathf.Clamp(initialLaneIndex, 0, laneLocalPositions.Length - 1);
 
             ResetForNewRun();
+        }
+
+        public void SetTransitionDurationMultiplier(float multiplier)
+        {
+            transitionDurationMultiplier = Mathf.Max(0.1f, multiplier);
         }
 
         public void ResetForNewRun()
@@ -78,7 +85,7 @@ namespace TapMiner.Core
             }
 
             transitionElapsedSeconds += Mathf.Max(0f, deltaTime);
-            var normalizedTime = Mathf.Clamp01(transitionElapsedSeconds / transitionDurationSeconds);
+            var normalizedTime = Mathf.Clamp01(transitionElapsedSeconds / CurrentTransitionDurationSeconds);
 
             hostTransform.localPosition = Vector3.Lerp(
                 laneLocalPositions[SourceLaneIndex],

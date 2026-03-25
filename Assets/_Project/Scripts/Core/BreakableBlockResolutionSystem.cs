@@ -10,11 +10,18 @@ namespace TapMiner.Core
     {
         private readonly List<bool[]> remainingBreakableMasks = new List<bool[]>();
         private IReadOnlyList<SegmentDescriptor> segmentDescriptors = Array.Empty<SegmentDescriptor>();
+        private float breakSpeedMultiplier = 1f;
 
         public BreakResolutionResult LastResolutionResult { get; private set; }
         public int LastResolvedSegmentIndex { get; private set; } = -1;
         public int LastResolvedLaneIndex { get; private set; } = -1;
         public int SuccessfulBreakCount { get; private set; }
+        public float BreakSpeedMultiplier => breakSpeedMultiplier;
+
+        public void SetBreakSpeedMultiplier(float multiplier)
+        {
+            breakSpeedMultiplier = multiplier < 1f ? 1f : multiplier;
+        }
 
         public void ResetForRun(IReadOnlyList<SegmentDescriptor> spawnedSegments)
         {

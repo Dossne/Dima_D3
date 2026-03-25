@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace TapMiner.Core
 {
@@ -8,11 +9,13 @@ namespace TapMiner.Core
     public sealed class LootDropResolutionSystem
     {
         private readonly List<LootDropRecord> grantedLoot = new List<LootDropRecord>();
+        private float lootValueMultiplier = 1f;
 
         public LootResolutionResult LastResolutionResult { get; private set; }
         public LootDropRecord LastGrantedLoot { get; private set; }
         public int TotalGrantedLootValue { get; private set; }
         public int SuccessfulLootDropCount { get; private set; }
+        public float LootValueMultiplier => lootValueMultiplier;
 
         public void ResetForRun(int runContextId)
         {
@@ -26,6 +29,11 @@ namespace TapMiner.Core
 
         public int ActiveRunContextId { get; private set; }
         public IReadOnlyList<LootDropRecord> GrantedLoot => grantedLoot;
+
+        public void SetLootValueMultiplier(float multiplier)
+        {
+            lootValueMultiplier = Mathf.Max(1f, multiplier);
+        }
 
         public LootResolutionResult TryResolveLoot(
             BreakResolutionResult breakResult,
@@ -48,7 +56,7 @@ namespace TapMiner.Core
                 return RecordResult(LootResolutionResult.RejectedNonLootBreakResult, null);
             }
 
-            var lootValue = ResolveLootValue(segmentIndex, laneIndex);
+            var lootValue = ResolveLootValue(segmentIndex, laneIndex, lootValueMultiplier);
             var record = new LootDropRecord(runContextId, segmentIndex, laneIndex, lootValue);
             grantedLoot.Add(record);
             LastGrantedLoot = record;
@@ -58,9 +66,10 @@ namespace TapMiner.Core
             return LastResolutionResult;
         }
 
-        private static int ResolveLootValue(int segmentIndex, int laneIndex)
+        private static int ResolveLootValue(int segmentIndex, int laneIndex, float multiplier)
         {
-            return 1 + ((segmentIndex + laneIndex) % 3);
+            var baseValue = 6 + ((segmentIndex + laneIndex) % 3);
+            return Mathf.Max(1, Mathf.CeilToInt(baseValue * multiplier));
         }
 
         private LootResolutionResult RecordResult(LootResolutionResult result, LootDropRecord record)

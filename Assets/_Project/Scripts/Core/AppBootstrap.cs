@@ -125,6 +125,43 @@ namespace TapMiner.Core
         [SerializeField]
         private int debugSuccessfulHazardContactCount;
 
+        [Header("Upgrade Runtime")]
+        [SerializeField]
+        private int debugSoftCurrencyBalance;
+
+        [SerializeField]
+        private int debugDrillPowerLevel;
+
+        [SerializeField]
+        private int debugMaxHpLevel;
+
+        [SerializeField]
+        private int debugMoveSpeedLevel;
+
+        [SerializeField]
+        private int debugLootValueLevel;
+
+        [SerializeField]
+        private int debugCollapseResistanceLevel;
+
+        [SerializeField]
+        private float debugAppliedBreakSpeedMultiplier = 1f;
+
+        [SerializeField]
+        private int debugAppliedMaxHealth = 1;
+
+        [SerializeField]
+        private int debugCurrentHealth = 1;
+
+        [SerializeField]
+        private float debugAppliedLaneTransitionDurationSeconds;
+
+        [SerializeField]
+        private float debugAppliedLootValueMultiplier = 1f;
+
+        [SerializeField]
+        private float debugAppliedCollapseCatchRateMultiplier = 1f;
+
         [Header("Loop Runtime")]
         [SerializeField]
         private int debugCompletedSegmentCount;
@@ -140,6 +177,8 @@ namespace TapMiner.Core
         private LootDropResolutionSystem lootDropResolutionSystem = null!;
         private RunRewardAggregationSystem runRewardAggregationSystem = null!;
         private HazardContactResolutionSystem hazardContactResolutionSystem = null!;
+        private UpgradePersistenceSystem upgradePersistenceSystem = null!;
+        private RunHealthSystem runHealthSystem = null!;
 
         public RunState CurrentRunState => runStateMachine.CurrentState;
         public int CurrentRunContextId => runStateMachine.CurrentRunContextId;
@@ -153,12 +192,19 @@ namespace TapMiner.Core
         public LootResolutionResult LastLootResolutionResult => lootDropResolutionSystem.LastResolutionResult;
         public RunRewardResult CurrentRunRewardResult => runRewardAggregationSystem.CurrentRewardResult;
         public HazardContactResult LastHazardContactResult => hazardContactResolutionSystem.LastHazardContactResult;
+        public int SoftCurrencyBalance => upgradePersistenceSystem.SoftCurrencyBalance;
+        public int CurrentRunHealth => runHealthSystem.CurrentHealth;
+        public int CurrentRunMaxHealth => runHealthSystem.MaxHealth;
+        public UpgradeStatsSnapshot CurrentUpgradeStats => upgradePersistenceSystem.CurrentStats;
+        public float CurrentLaneTransitionDurationSeconds => laneTransitionController.CurrentTransitionDurationSeconds;
 
         private void Awake()
         {
             runStateMachine = new RunStateMachine();
             runStateMachine.StateChanged += HandleStateChanged;
             swipeInputInterpreter = new SwipeInputInterpreter(minimumSwipeDistancePixels);
+            upgradePersistenceSystem = new UpgradePersistenceSystem();
+            runHealthSystem = new RunHealthSystem();
             laneTransitionController = new LaneTransitionController(
                 transform,
                 laneLocalPositions,
@@ -174,6 +220,8 @@ namespace TapMiner.Core
             lootDropResolutionSystem.ResetForRun(CurrentRunContextId);
             runRewardAggregationSystem.ResetForRun(CurrentRunContextId);
             hazardContactResolutionSystem.ResetForRun(CurrentRunContextId, segmentSpawnSystem.SpawnedSegments);
+            ApplyUpgradeStatsToRuntime();
+            ResetHealthForCurrentRun();
 
             SyncDebugState();
 
@@ -258,6 +306,43 @@ namespace TapMiner.Core
             return TryProcessCurrentSegment();
         }
 
+        public bool TryPurchaseUpgrade(UpgradeId upgradeId)
+        {
+            if (CurrentRunState == RunState.RunActive || CurrentRunState == RunState.RunRestarting)
+            {
+                return false;
+            }
+
+            var result = upgradePersistenceSystem.TryPurchase(upgradeId);
+            if (!result)
+            {
+                return false;
+            }
+
+            ApplyUpgradeStatsToRuntime();
+            ResetHealthForCurrentRun();
+            SyncDebugState();
+            return true;
+        }
+
+        public int GetUpgradeLevel(UpgradeId upgradeId)
+        {
+            return upgradePersistenceSystem.GetLevel(upgradeId);
+        }
+
+        public int GetNextUpgradeCost(UpgradeId upgradeId)
+        {
+            return upgradePersistenceSystem.GetNextPurchaseCost(upgradeId);
+        }
+
+        public void ReloadUpgradeProgress()
+        {
+            upgradePersistenceSystem.ReloadFromDisk();
+            ApplyUpgradeStatsToRuntime();
+            ResetHealthForCurrentRun();
+            SyncDebugState();
+        }
+
         public HazardContactResult RequestResolveCurrentLaneHazardContact()
         {
             return TryResolveHazardAtLaneInternal(CurrentCommittedLaneIndex);
@@ -277,6 +362,20 @@ namespace TapMiner.Core
             }
 
             laneTransitionController.Tick(deltaTime);
+            SyncDebugState();
+        }
+
+        public void DebugResetUpgradeProgressForValidation()
+        {
+            upgradePersistenceSystem.DebugResetAllProgress();
+            ApplyUpgradeStatsToRuntime();
+            ResetHealthForCurrentRun();
+            SyncDebugState();
+        }
+
+        public void DebugGrantSoftCurrencyForValidation(int amount)
+        {
+            upgradePersistenceSystem.DebugGrantSoftCurrency(amount);
             SyncDebugState();
         }
 #endif
@@ -382,7 +481,15 @@ namespace TapMiner.Core
 
             if (hazardResult == HazardContactResult.HazardContactResolved)
             {
-                NotifyLethalDamage();
+                var acceptedDamage = runHealthSystem.TryApplyDamage(
+                    damageAmount: 1,
+                    canApplyDamage: runStateMachine.IsDamageProcessingEnabled,
+                    out var isLethal);
+
+                if (acceptedDamage && isLethal)
+                {
+                    NotifyLethalDamage();
+                }
             }
 
             SyncDebugState();
@@ -465,6 +572,11 @@ namespace TapMiner.Core
 
         private void HandleStateChanged(RunState previousState, RunState newState)
         {
+            if (previousState == RunState.RunActive && newState == RunState.RunDeathResolved)
+            {
+                upgradePersistenceSystem.BankReward(CurrentRunRewardResult.TotalRewardValue);
+            }
+
             if (newState == RunState.RunRestarting)
             {
                 laneTransitionController.ResetForNewRun();
@@ -488,6 +600,8 @@ namespace TapMiner.Core
                 runRewardAggregationSystem.ResetForRun(CurrentRunContextId);
                 breakableBlockResolutionSystem.ResetForRun(segmentSpawnSystem.SpawnedSegments);
                 hazardContactResolutionSystem.ResetForRun(CurrentRunContextId, segmentSpawnSystem.SpawnedSegments);
+                ApplyUpgradeStatsToRuntime();
+                ResetHealthForCurrentRun();
                 debugActiveSegmentIndex = 0;
                 debugCompletedSegmentCount = 0;
                 debugLastCompletedSegmentIndex = -1;
@@ -537,6 +651,32 @@ namespace TapMiner.Core
             debugCurrentSegmentHazardTargetCount =
                 hazardContactResolutionSystem.GetHazardTargetCount(debugActiveSegmentIndex);
             debugSuccessfulHazardContactCount = hazardContactResolutionSystem.SuccessfulHazardContactCount;
+            debugSoftCurrencyBalance = upgradePersistenceSystem.SoftCurrencyBalance;
+            debugDrillPowerLevel = upgradePersistenceSystem.GetLevel(UpgradeId.DrillPower);
+            debugMaxHpLevel = upgradePersistenceSystem.GetLevel(UpgradeId.MaxHp);
+            debugMoveSpeedLevel = upgradePersistenceSystem.GetLevel(UpgradeId.MoveSpeed);
+            debugLootValueLevel = upgradePersistenceSystem.GetLevel(UpgradeId.LootValue);
+            debugCollapseResistanceLevel = upgradePersistenceSystem.GetLevel(UpgradeId.CollapseResistance);
+            debugAppliedBreakSpeedMultiplier = CurrentUpgradeStats.BlockBreakSpeedMultiplier;
+            debugAppliedMaxHealth = CurrentUpgradeStats.MaxHealth;
+            debugCurrentHealth = runHealthSystem.CurrentHealth;
+            debugAppliedLaneTransitionDurationSeconds = laneTransitionController.CurrentTransitionDurationSeconds;
+            debugAppliedLootValueMultiplier = lootDropResolutionSystem.LootValueMultiplier;
+            debugAppliedCollapseCatchRateMultiplier = hazardContactResolutionSystem.CollapseCatchRateMultiplier;
+        }
+
+        private void ApplyUpgradeStatsToRuntime()
+        {
+            var stats = upgradePersistenceSystem.CurrentStats;
+            laneTransitionController.SetTransitionDurationMultiplier(stats.LaneTransitionDurationMultiplier);
+            lootDropResolutionSystem.SetLootValueMultiplier(stats.LootValueMultiplier);
+            breakableBlockResolutionSystem.SetBreakSpeedMultiplier(stats.BlockBreakSpeedMultiplier);
+            hazardContactResolutionSystem.SetCollapseCatchRateMultiplier(stats.CollapseCatchRateMultiplier);
+        }
+
+        private void ResetHealthForCurrentRun()
+        {
+            runHealthSystem.ResetForRun(CurrentUpgradeStats.MaxHealth);
         }
     }
 }
