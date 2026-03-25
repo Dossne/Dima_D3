@@ -38,9 +38,26 @@ namespace TapMiner.Core
         [SerializeField]
         private bool debugIsLaneTransitioning;
 
+        [Header("Segment Runtime")]
+        [SerializeField]
+        private int initialSegmentBatchCount = 12;
+
+        [SerializeField]
+        private int debugSpawnedSegmentCount;
+
+        [SerializeField]
+        private SegmentType debugFirstSegmentType;
+
+        [SerializeField]
+        private DepthBucket debugFirstSegmentDepthBucket;
+
+        [SerializeField]
+        private int debugFirstSegmentSafeLaneIndex;
+
         private RunStateMachine runStateMachine = null!;
         private SwipeInputInterpreter swipeInputInterpreter = null!;
         private LaneTransitionController laneTransitionController = null!;
+        private SegmentSpawnSystem segmentSpawnSystem = null!;
 
         public RunState CurrentRunState => runStateMachine.CurrentState;
         public int CurrentRunContextId => runStateMachine.CurrentRunContextId;
@@ -49,6 +66,7 @@ namespace TapMiner.Core
         public bool HasActiveRunAuthority => runStateMachine.HasActiveRunAuthority;
         public int CurrentCommittedLaneIndex => laneTransitionController.CommittedLaneIndex;
         public bool IsLaneTransitioning => laneTransitionController.IsTransitioning;
+        public int CurrentSpawnedSegmentCount => segmentSpawnSystem.SpawnedSegments.Count;
 
         private void Awake()
         {
@@ -60,11 +78,14 @@ namespace TapMiner.Core
                 laneLocalPositions,
                 laneTransitionDurationSeconds,
                 initialLaneIndex);
+            segmentSpawnSystem = new SegmentSpawnSystem(initialSegmentBatchCount);
+            segmentSpawnSystem.ResetForRun();
 
             SyncDebugState();
 
             Debug.Log($"[AppBootstrap] Started v{bootstrapVersion}");
             Debug.Log($"[AppBootstrap] Run state authority initialized in {CurrentRunState} (context {CurrentRunContextId}).");
+            Debug.Log($"[AppBootstrap] Segment batch prepared with {CurrentSpawnedSegmentCount} legal segments.");
         }
 
         private void Update()
@@ -145,6 +166,7 @@ namespace TapMiner.Core
             if (newState == RunState.RunRestarting)
             {
                 laneTransitionController.ResetForNewRun();
+                segmentSpawnSystem.ResetForRun();
             }
             else if (newState != RunState.RunActive)
             {
@@ -165,6 +187,18 @@ namespace TapMiner.Core
             debugCommittedLaneIndex = laneTransitionController.CommittedLaneIndex;
             debugTargetLaneIndex = laneTransitionController.TargetLaneIndex;
             debugIsLaneTransitioning = laneTransitionController.IsTransitioning;
+
+            if (segmentSpawnSystem.SpawnedSegments.Count <= 0)
+            {
+                debugSpawnedSegmentCount = 0;
+                return;
+            }
+
+            var firstSegment = segmentSpawnSystem.SpawnedSegments[0];
+            debugSpawnedSegmentCount = segmentSpawnSystem.SpawnedSegments.Count;
+            debugFirstSegmentType = firstSegment.SegmentType;
+            debugFirstSegmentDepthBucket = firstSegment.DepthBucket;
+            debugFirstSegmentSafeLaneIndex = firstSegment.SafeLaneIndex;
         }
     }
 }
