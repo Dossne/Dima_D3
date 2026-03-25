@@ -55,6 +55,20 @@ namespace TapMiner.EditorTools
             Debug.Log("[CoreLoopSmokeRunner] Requested play mode for T012 smoke.");
         }
 
+        [MenuItem("Tools/Tap Miner/Run T013 Balance Smoke")]
+        public static void RunT013BalanceSmoke()
+        {
+            if (IsRunning())
+            {
+                Debug.LogWarning("[CoreLoopSmokeRunner] Smoke run is already active.");
+                return;
+            }
+
+            SetRunning(true);
+            EditorApplication.isPlaying = true;
+            Debug.Log("[CoreLoopSmokeRunner] Requested play mode for T013 smoke.");
+        }
+
         private static void HandlePlayModeStateChanged(PlayModeStateChange state)
         {
             if (!IsRunning())
@@ -225,6 +239,28 @@ namespace TapMiner.EditorTools
             {
                 Debug.Log(
                     $"[CoreLoopSmokeRunner] Final state | RunState={bootstrap.CurrentRunState} | Lane={bootstrap.CurrentCommittedLaneIndex} | Segments={bootstrap.CurrentSpawnedSegmentCount} | Break={bootstrap.LastBreakResolutionResult} | Loot={bootstrap.LastLootResolutionResult} | Hazard={bootstrap.LastHazardContactResult} | RunReward={bootstrap.CurrentRunRewardResult.TotalRewardValue} | RewardCount={bootstrap.CurrentRunRewardResult.GrantedLootCount} | Balance={bootstrap.SoftCurrencyBalance}");
+            }));
+
+            Steps.Enqueue(new SmokeStep("Report T013 opening band", bootstrap => bootstrap.CurrentRunState == RunState.RunActive, 0.1d, bootstrap =>
+            {
+                const int baselineRewardPerRun = 6;
+
+                foreach (var definition in UpgradeCatalog.All)
+                {
+                    var firstCost = UpgradeCatalog.GetCostForLevel(definition.Id, 0);
+                    var runsToAfford = Mathf.CeilToInt(firstCost / (float)baselineRewardPerRun);
+                    Debug.Log(
+                        $"[CoreLoopSmokeRunner] T013 opening band | Upgrade={definition.DisplayName} | FirstCost={firstCost} | RunsToAfford={runsToAfford} | Role={definition.OpeningBandRole} | Effect={definition.PlayerFacingEffect}");
+                }
+            }));
+
+            Steps.Enqueue(new SmokeStep("Report T013 cost table", bootstrap => bootstrap.CurrentRunState == RunState.RunActive, 0.1d, bootstrap =>
+            {
+                foreach (var definition in UpgradeCatalog.All)
+                {
+                    Debug.Log(
+                        $"[CoreLoopSmokeRunner] T013 cost table | Upgrade={definition.DisplayName} | Costs={string.Join(",", definition.LevelCosts)}");
+                }
             }));
         }
 

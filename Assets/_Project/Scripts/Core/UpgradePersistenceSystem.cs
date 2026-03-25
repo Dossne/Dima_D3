@@ -41,7 +41,8 @@ namespace TapMiner.Core
 
         public int GetNextPurchaseCost(UpgradeId id)
         {
-            return UpgradeCatalog.GetDefinition(id).BaseCost;
+            var currentLevel = GetLevel(id);
+            return UpgradeCatalog.GetCostForLevel(id, currentLevel);
         }
 
         public bool TryPurchase(UpgradeId id)
