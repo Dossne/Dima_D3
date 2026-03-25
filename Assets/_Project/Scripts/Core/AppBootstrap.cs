@@ -80,12 +80,23 @@ namespace TapMiner.Core
         [SerializeField]
         private int debugLastGrantedLootValue;
 
+        [Header("Hazard Runtime")]
+        [SerializeField]
+        private HazardContactResult debugLastHazardContactResult;
+
+        [SerializeField]
+        private int debugCurrentSegmentHazardTargetCount;
+
+        [SerializeField]
+        private int debugSuccessfulHazardContactCount;
+
         private RunStateMachine runStateMachine = null!;
         private SwipeInputInterpreter swipeInputInterpreter = null!;
         private LaneTransitionController laneTransitionController = null!;
         private SegmentSpawnSystem segmentSpawnSystem = null!;
         private BreakableBlockResolutionSystem breakableBlockResolutionSystem = null!;
         private LootDropResolutionSystem lootDropResolutionSystem = null!;
+        private HazardContactResolutionSystem hazardContactResolutionSystem = null!;
 
         public RunState CurrentRunState => runStateMachine.CurrentState;
         public int CurrentRunContextId => runStateMachine.CurrentRunContextId;
@@ -97,6 +108,7 @@ namespace TapMiner.Core
         public int CurrentSpawnedSegmentCount => segmentSpawnSystem.SpawnedSegments.Count;
         public BreakResolutionResult LastBreakResolutionResult => breakableBlockResolutionSystem.LastResolutionResult;
         public LootResolutionResult LastLootResolutionResult => lootDropResolutionSystem.LastResolutionResult;
+        public HazardContactResult LastHazardContactResult => hazardContactResolutionSystem.LastHazardContactResult;
 
         private void Awake()
         {
@@ -111,9 +123,11 @@ namespace TapMiner.Core
             segmentSpawnSystem = new SegmentSpawnSystem(initialSegmentBatchCount);
             breakableBlockResolutionSystem = new BreakableBlockResolutionSystem();
             lootDropResolutionSystem = new LootDropResolutionSystem();
+            hazardContactResolutionSystem = new HazardContactResolutionSystem();
             segmentSpawnSystem.ResetForRun();
             breakableBlockResolutionSystem.ResetForRun(segmentSpawnSystem.SpawnedSegments);
             lootDropResolutionSystem.ResetForRun(CurrentRunContextId);
+            hazardContactResolutionSystem.ResetForRun(CurrentRunContextId, segmentSpawnSystem.SpawnedSegments);
 
             SyncDebugState();
 
@@ -124,6 +138,11 @@ namespace TapMiner.Core
 
         private void Update()
         {
+            if (laneTransitionController == null || swipeInputInterpreter == null || runStateMachine == null)
+            {
+                return;
+            }
+
             laneTransitionController.Tick(Time.deltaTime);
 
             if (swipeInputInterpreter.TryConsumeSwipeDirection(out var direction))
@@ -182,6 +201,16 @@ namespace TapMiner.Core
             return TryResolveBreakAtLane(laneIndex);
         }
 
+        public HazardContactResult RequestResolveCurrentLaneHazardContact()
+        {
+            return TryResolveHazardAtLaneInternal(CurrentCommittedLaneIndex);
+        }
+
+        public HazardContactResult RequestResolveHazardAtLane(int laneIndex)
+        {
+            return TryResolveHazardAtLaneInternal(laneIndex);
+        }
+
         private bool TryCommand(string commandName, System.Func<bool> command)
         {
             var previousState = CurrentRunState;
@@ -223,6 +252,24 @@ namespace TapMiner.Core
             return breakResult;
         }
 
+        private HazardContactResult TryResolveHazardAtLaneInternal(int laneIndex)
+        {
+            var hazardResult = hazardContactResolutionSystem.TryResolveHazardContact(
+                CurrentRunContextId,
+                debugActiveSegmentIndex,
+                laneIndex,
+                CurrentCommittedLaneIndex,
+                runStateMachine.CanAcceptGameplayInput());
+
+            if (hazardResult == HazardContactResult.HazardContactResolved)
+            {
+                NotifyLethalDamage();
+            }
+
+            SyncDebugState();
+            return hazardResult;
+        }
+
         private void HandleStateChanged(RunState previousState, RunState newState)
         {
             if (newState == RunState.RunRestarting)
@@ -230,6 +277,7 @@ namespace TapMiner.Core
                 laneTransitionController.ResetForNewRun();
                 segmentSpawnSystem.ResetForRun();
                 breakableBlockResolutionSystem.ResetForRun(segmentSpawnSystem.SpawnedSegments);
+                hazardContactResolutionSystem.ResetForRun(CurrentRunContextId, segmentSpawnSystem.SpawnedSegments);
                 debugActiveSegmentIndex = 0;
             }
             else if (newState != RunState.RunActive)
@@ -240,6 +288,7 @@ namespace TapMiner.Core
             if (newState == RunState.RunActive && previousState != RunState.RunActive)
             {
                 lootDropResolutionSystem.ResetForRun(CurrentRunContextId);
+                hazardContactResolutionSystem.ResetForRun(CurrentRunContextId, segmentSpawnSystem.SpawnedSegments);
             }
 
             SyncDebugState();
@@ -278,6 +327,10 @@ namespace TapMiner.Core
             debugLastGrantedLootValue = lootDropResolutionSystem.LastGrantedLoot != null
                 ? lootDropResolutionSystem.LastGrantedLoot.LootValue
                 : 0;
+            debugLastHazardContactResult = hazardContactResolutionSystem.LastHazardContactResult;
+            debugCurrentSegmentHazardTargetCount =
+                hazardContactResolutionSystem.GetHazardTargetCount(debugActiveSegmentIndex);
+            debugSuccessfulHazardContactCount = hazardContactResolutionSystem.SuccessfulHazardContactCount;
         }
     }
 }
