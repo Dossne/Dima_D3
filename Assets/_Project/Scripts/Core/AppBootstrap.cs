@@ -7,9 +7,12 @@ namespace TapMiner.Core
     /// </summary>
     public class AppBootstrap : MonoBehaviour
     {
-#pragma warning disable 0414
         [SerializeField]
         private string bootstrapVersion = "0.1.0";
-#pragma warning restore 0414
+
+        private void Awake()
+        {
+            Debug.Log($"[AppBootstrap] Started v{bootstrapVersion}");
+        }
     }
 }
