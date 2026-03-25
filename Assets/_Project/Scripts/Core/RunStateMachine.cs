@@ -7,7 +7,7 @@ namespace TapMiner.Core
     /// </summary>
     public sealed class RunStateMachine
     {
-        public event Action<RunState, RunState>? StateChanged;
+        public event Action<RunState, RunState> StateChanged;
 
         public RunState CurrentState { get; private set; }
         public bool IsMovementProcessingEnabled { get; private set; }
