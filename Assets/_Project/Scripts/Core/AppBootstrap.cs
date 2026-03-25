@@ -102,6 +102,19 @@ namespace TapMiner.Core
         [SerializeField]
         private int debugLastGrantedLootValue;
 
+        [Header("Run Reward Runtime")]
+        [SerializeField]
+        private int debugCurrentRunRewardValue;
+
+        [SerializeField]
+        private int debugCurrentRunRewardCount;
+
+        [SerializeField]
+        private int debugLastRewardSegmentIndex = -1;
+
+        [SerializeField]
+        private int debugLastRewardLaneIndex = -1;
+
         [Header("Hazard Runtime")]
         [SerializeField]
         private HazardContactResult debugLastHazardContactResult;
@@ -125,6 +138,7 @@ namespace TapMiner.Core
         private SegmentSpawnSystem segmentSpawnSystem = null!;
         private BreakableBlockResolutionSystem breakableBlockResolutionSystem = null!;
         private LootDropResolutionSystem lootDropResolutionSystem = null!;
+        private RunRewardAggregationSystem runRewardAggregationSystem = null!;
         private HazardContactResolutionSystem hazardContactResolutionSystem = null!;
 
         public RunState CurrentRunState => runStateMachine.CurrentState;
@@ -137,6 +151,7 @@ namespace TapMiner.Core
         public int CurrentSpawnedSegmentCount => segmentSpawnSystem.SpawnedSegments.Count;
         public BreakResolutionResult LastBreakResolutionResult => breakableBlockResolutionSystem.LastResolutionResult;
         public LootResolutionResult LastLootResolutionResult => lootDropResolutionSystem.LastResolutionResult;
+        public RunRewardResult CurrentRunRewardResult => runRewardAggregationSystem.CurrentRewardResult;
         public HazardContactResult LastHazardContactResult => hazardContactResolutionSystem.LastHazardContactResult;
 
         private void Awake()
@@ -152,10 +167,12 @@ namespace TapMiner.Core
             segmentSpawnSystem = new SegmentSpawnSystem(initialSegmentBatchCount);
             breakableBlockResolutionSystem = new BreakableBlockResolutionSystem();
             lootDropResolutionSystem = new LootDropResolutionSystem();
+            runRewardAggregationSystem = new RunRewardAggregationSystem();
             hazardContactResolutionSystem = new HazardContactResolutionSystem();
             segmentSpawnSystem.ResetForRun();
             breakableBlockResolutionSystem.ResetForRun(segmentSpawnSystem.SpawnedSegments);
             lootDropResolutionSystem.ResetForRun(CurrentRunContextId);
+            runRewardAggregationSystem.ResetForRun(CurrentRunContextId);
             hazardContactResolutionSystem.ResetForRun(CurrentRunContextId, segmentSpawnSystem.SpawnedSegments);
 
             SyncDebugState();
@@ -346,6 +363,10 @@ namespace TapMiner.Core
                 debugActiveSegmentIndex,
                 laneIndex);
 
+            runRewardAggregationSystem.TryAggregateLoot(
+                lootDropResolutionSystem.LastResolutionResult,
+                lootDropResolutionSystem.LastGrantedLoot);
+
             SyncDebugState();
             return breakResult;
         }
@@ -450,6 +471,7 @@ namespace TapMiner.Core
                 segmentSpawnSystem.ResetForRun();
                 breakableBlockResolutionSystem.ResetForRun(segmentSpawnSystem.SpawnedSegments);
                 lootDropResolutionSystem.ResetForRun(CurrentRunContextId);
+                runRewardAggregationSystem.ResetForRun(CurrentRunContextId);
                 hazardContactResolutionSystem.ResetForRun(CurrentRunContextId, segmentSpawnSystem.SpawnedSegments);
                 debugActiveSegmentIndex = 0;
                 debugCompletedSegmentCount = 0;
@@ -463,6 +485,7 @@ namespace TapMiner.Core
             if (newState == RunState.RunActive && previousState != RunState.RunActive)
             {
                 lootDropResolutionSystem.ResetForRun(CurrentRunContextId);
+                runRewardAggregationSystem.ResetForRun(CurrentRunContextId);
                 breakableBlockResolutionSystem.ResetForRun(segmentSpawnSystem.SpawnedSegments);
                 hazardContactResolutionSystem.ResetForRun(CurrentRunContextId, segmentSpawnSystem.SpawnedSegments);
                 debugActiveSegmentIndex = 0;
@@ -506,6 +529,10 @@ namespace TapMiner.Core
             debugLastGrantedLootValue = lootDropResolutionSystem.LastGrantedLoot != null
                 ? lootDropResolutionSystem.LastGrantedLoot.LootValue
                 : 0;
+            debugCurrentRunRewardValue = runRewardAggregationSystem.CurrentRewardResult.TotalRewardValue;
+            debugCurrentRunRewardCount = runRewardAggregationSystem.CurrentRewardResult.GrantedLootCount;
+            debugLastRewardSegmentIndex = runRewardAggregationSystem.CurrentRewardResult.LastGrantedSegmentIndex;
+            debugLastRewardLaneIndex = runRewardAggregationSystem.CurrentRewardResult.LastGrantedLaneIndex;
             debugLastHazardContactResult = hazardContactResolutionSystem.LastHazardContactResult;
             debugCurrentSegmentHazardTargetCount =
                 hazardContactResolutionSystem.GetHazardTargetCount(debugActiveSegmentIndex);

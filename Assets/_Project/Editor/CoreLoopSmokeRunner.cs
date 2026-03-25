@@ -119,7 +119,7 @@ namespace TapMiner.EditorTools
             {
                 var result = bootstrap.RequestProcessCurrentSegment();
                 Debug.Log(
-                    $"[CoreLoopSmokeRunner] Process segment 0 -> {result} | Lane={bootstrap.CurrentCommittedLaneIndex} | Break={bootstrap.LastBreakResolutionResult} | Loot={bootstrap.LastLootResolutionResult}");
+                    $"[CoreLoopSmokeRunner] Process segment 0 -> {result} | Lane={bootstrap.CurrentCommittedLaneIndex} | Break={bootstrap.LastBreakResolutionResult} | Loot={bootstrap.LastLootResolutionResult} | RunReward={bootstrap.CurrentRunRewardResult.TotalRewardValue} | RewardCount={bootstrap.CurrentRunRewardResult.GrantedLootCount}");
             }));
 
             Steps.Enqueue(new SmokeStep("Move right to center", bootstrap => bootstrap.CurrentRunState == RunState.RunActive && !bootstrap.IsLaneTransitioning && bootstrap.CurrentCommittedLaneIndex == 0, 0.2d, bootstrap =>
@@ -147,13 +147,13 @@ namespace TapMiner.EditorTools
             {
                 var result = bootstrap.RequestRestartRun();
                 Debug.Log(
-                    $"[CoreLoopSmokeRunner] Restart run -> {result} | RunState={bootstrap.CurrentRunState} | Context={bootstrap.CurrentRunContextId}");
+                    $"[CoreLoopSmokeRunner] Restart run -> {result} | RunState={bootstrap.CurrentRunState} | Context={bootstrap.CurrentRunContextId} | RunReward={bootstrap.CurrentRunRewardResult.TotalRewardValue} | RewardCount={bootstrap.CurrentRunRewardResult.GrantedLootCount}");
             }));
 
             Steps.Enqueue(new SmokeStep("Report final state", bootstrap => bootstrap.CurrentRunState == RunState.RunActive && !bootstrap.IsLaneTransitioning, 0.1d, bootstrap =>
             {
                 Debug.Log(
-                    $"[CoreLoopSmokeRunner] Final state | RunState={bootstrap.CurrentRunState} | Lane={bootstrap.CurrentCommittedLaneIndex} | Segments={bootstrap.CurrentSpawnedSegmentCount} | Break={bootstrap.LastBreakResolutionResult} | Loot={bootstrap.LastLootResolutionResult} | Hazard={bootstrap.LastHazardContactResult}");
+                    $"[CoreLoopSmokeRunner] Final state | RunState={bootstrap.CurrentRunState} | Lane={bootstrap.CurrentCommittedLaneIndex} | Segments={bootstrap.CurrentSpawnedSegmentCount} | Break={bootstrap.LastBreakResolutionResult} | Loot={bootstrap.LastLootResolutionResult} | Hazard={bootstrap.LastHazardContactResult} | RunReward={bootstrap.CurrentRunRewardResult.TotalRewardValue} | RewardCount={bootstrap.CurrentRunRewardResult.GrantedLootCount}");
             }));
         }
 
