@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -231,12 +233,14 @@ namespace TapMiner.Core
         private UpgradePersistenceSystem upgradePersistenceSystem = null!;
         private RunHealthSystem runHealthSystem = null!;
         private MissionLayerLiteSystem missionLayerLiteSystem = null!;
+        private PlaytestInstrumentationSystem playtestInstrumentationSystem = null!;
         private Text feedbackText = null!;
         private AudioSource feedbackAudioSource = null!;
         private string defaultFeedbackText = "Bootstrap OK";
         private Color defaultFeedbackColor = Color.white;
         private Vector3 defaultFeedbackScale = Vector3.one;
         private float feedbackTimerSeconds;
+        private PlaytestDeathCause pendingPlaytestDeathCause;
 
         public RunState CurrentRunState => runStateMachine.CurrentState;
         public int CurrentRunContextId => runStateMachine.CurrentRunContextId;
@@ -261,6 +265,7 @@ namespace TapMiner.Core
         public int TotalMissionRewardsGranted => missionLayerLiteSystem.TotalMissionRewardsGranted;
         public string CurrentFeedbackText => feedbackText != null ? feedbackText.text : string.Empty;
         public bool IsFeedbackActive => feedbackTimerSeconds > 0f;
+        public string CurrentPlaytestSessionId => playtestInstrumentationSystem.SessionId;
 
         private void Awake()
         {
@@ -270,6 +275,7 @@ namespace TapMiner.Core
             upgradePersistenceSystem = new UpgradePersistenceSystem();
             runHealthSystem = new RunHealthSystem();
             missionLayerLiteSystem = new MissionLayerLiteSystem();
+            playtestInstrumentationSystem = new PlaytestInstrumentationSystem();
             laneTransitionController = new LaneTransitionController(
                 transform,
                 laneLocalPositions,
@@ -331,22 +337,55 @@ namespace TapMiner.Core
 
         public bool RequestStartRun()
         {
-            return TryCommand("StartRun", runStateMachine.TryStartRun);
+            var result = TryCommand("StartRun", runStateMachine.TryStartRun);
+            if (result)
+            {
+                playtestInstrumentationSystem.RecordRunStart(
+                    CurrentRunContextId,
+                    CurrentCommittedLaneIndex,
+                    CurrentRunMaxHealth,
+                    SoftCurrencyBalance);
+            }
+
+            return result;
         }
 
         public bool RequestRestartRun()
         {
-            return TryCommand("RestartRun", runStateMachine.TryRestartRun);
+            var completedRunContextId = CurrentRunContextId;
+            var result = TryCommand("RestartRun", runStateMachine.TryRestartRun);
+            if (result)
+            {
+                playtestInstrumentationSystem.RecordRestartPressed(completedRunContextId, CurrentRunContextId);
+            }
+
+            return result;
         }
 
         public bool NotifyLethalDamage()
         {
-            return TryCommand("NotifyLethalDamage", runStateMachine.TryResolveLethalDamage);
+            var previousPendingCause = pendingPlaytestDeathCause;
+            pendingPlaytestDeathCause = PlaytestDeathCause.HazardContact;
+            var result = TryCommand("NotifyLethalDamage", runStateMachine.TryResolveLethalDamage);
+            if (!result)
+            {
+                pendingPlaytestDeathCause = previousPendingCause;
+            }
+
+            return result;
         }
 
         public bool NotifyRunInvalidFailure()
         {
-            return TryCommand("NotifyRunInvalidFailure", runStateMachine.TryResolveRunInvalidFailure);
+            var previousPendingCause = pendingPlaytestDeathCause;
+            pendingPlaytestDeathCause = PlaytestDeathCause.RunInvalidFailure;
+            var result = TryCommand("NotifyRunInvalidFailure", runStateMachine.TryResolveRunInvalidFailure);
+            if (!result)
+            {
+                pendingPlaytestDeathCause = previousPendingCause;
+            }
+
+            return result;
         }
 
         public bool RequestLaneTransitionLeft()
@@ -381,12 +420,18 @@ namespace TapMiner.Core
                 return false;
             }
 
+            var purchaseCost = upgradePersistenceSystem.GetNextPurchaseCost(upgradeId);
             var result = upgradePersistenceSystem.TryPurchase(upgradeId);
             if (!result)
             {
                 return false;
             }
 
+            playtestInstrumentationSystem.RecordUpgradePurchase(
+                upgradeId,
+                upgradePersistenceSystem.GetLevel(upgradeId),
+                purchaseCost,
+                SoftCurrencyBalance);
             ApplyUpgradeStatsToRuntime();
             ResetHealthForCurrentRun();
             SyncDebugState();
@@ -414,6 +459,42 @@ namespace TapMiner.Core
         public MissionProgress GetMission(MissionTemplateId templateId)
         {
             return missionLayerLiteSystem.GetMission(templateId);
+        }
+
+        public PlaytestSessionLog CreatePlaytestSessionLogSnapshot()
+        {
+            return playtestInstrumentationSystem.CreateSessionLogSnapshot();
+        }
+
+        public PlaytestReportRecord CreatePlaytestReportRecord()
+        {
+            return playtestInstrumentationSystem.CreateReportRecord();
+        }
+
+        public PlaytestSchemaValidationResult ValidatePlaytestSessionLogSnapshot()
+        {
+            return PlaytestSchemaValidator.ValidateSessionLog(CreatePlaytestSessionLogSnapshot());
+        }
+
+        public PlaytestSchemaValidationResult ValidatePlaytestReportRecord()
+        {
+            return PlaytestSchemaValidator.ValidateReportRecord(CreatePlaytestReportRecord());
+        }
+
+        public string CreatePlaytestCsvPreview()
+        {
+            var snapshot = CreatePlaytestSessionLogSnapshot();
+            var builder = new StringBuilder();
+            builder.AppendLine("event_type,run_context_id,depth,segment_index,lane_index,reward_delta,reward_total,death_cause,restart_latency_seconds,detail");
+
+            for (var index = 0; index < snapshot.Events.Count; index += 1)
+            {
+                var entry = snapshot.Events[index];
+                builder.AppendLine(
+                    $"{entry.EventType},{entry.RunContextId},{entry.Depth},{entry.SegmentIndex},{entry.LaneIndex},{entry.RewardDelta},{entry.RewardTotal},{entry.DeathCause},{entry.RestartLatencySeconds.ToString("0.00", CultureInfo.InvariantCulture)},\"{entry.Detail}\"");
+            }
+
+            return builder.ToString();
         }
 
         public string GetSegmentSummary(int segmentIndex)
@@ -508,9 +589,16 @@ namespace TapMiner.Core
                 return false;
             }
 
+            var previousLaneIndex = CurrentCommittedLaneIndex;
             var result = laneTransitionController.TryStartTransition(direction);
             if (result)
             {
+                playtestInstrumentationSystem.RecordLaneInput(
+                    CurrentRunContextId,
+                    previousLaneIndex,
+                    laneTransitionController.TargetLaneIndex,
+                    debugCompletedSegmentCount,
+                    direction);
                 TriggerFeedback("SHIFT", new Color(0.45f, 0.8f, 1f, 1f), 0.18f, laneTransitionFeedbackClip);
             }
 
@@ -566,6 +654,18 @@ namespace TapMiner.Core
 
             if (breakResult == BreakResolutionResult.BreakSucceeded)
             {
+                var rewardDelta = lootDropResolutionSystem.LastResolutionResult == LootResolutionResult.LootGranted &&
+                                  lootDropResolutionSystem.LastGrantedLoot != null
+                    ? lootDropResolutionSystem.LastGrantedLoot.LootValue
+                    : 0;
+                playtestInstrumentationSystem.RecordBlockBreak(
+                    CurrentRunContextId,
+                    debugActiveSegmentIndex,
+                    laneIndex,
+                    debugCompletedSegmentCount + 1,
+                    rewardDelta,
+                    CurrentRunRewardResult.TotalRewardValue);
+
                 if (lootDropResolutionSystem.LastResolutionResult == LootResolutionResult.LootGranted &&
                     lootDropResolutionSystem.LastGrantedLoot != null)
                 {
@@ -610,6 +710,18 @@ namespace TapMiner.Core
                     damageAmount: 1,
                     canApplyDamage: runStateMachine.IsDamageProcessingEnabled,
                     out var isLethal);
+
+                if (acceptedDamage)
+                {
+                    playtestInstrumentationSystem.RecordDamageTaken(
+                        CurrentRunContextId,
+                        debugActiveSegmentIndex,
+                        laneIndex,
+                        debugCompletedSegmentCount + 1,
+                        runHealthSystem.CurrentHealth,
+                        runHealthSystem.MaxHealth,
+                        PlaytestDeathCause.HazardContact);
+                }
 
                 if (acceptedDamage && isLethal)
                 {
@@ -700,7 +812,17 @@ namespace TapMiner.Core
         {
             if (previousState == RunState.RunActive && newState == RunState.RunDeathResolved)
             {
+                playtestInstrumentationSystem.RecordDeath(
+                    CurrentRunContextId,
+                    pendingPlaytestDeathCause,
+                    debugCompletedSegmentCount,
+                    CurrentRunRewardResult.TotalRewardValue);
+                playtestInstrumentationSystem.RecordRunResults(
+                    CurrentRunContextId,
+                    debugCompletedSegmentCount,
+                    CurrentRunRewardResult.TotalRewardValue);
                 upgradePersistenceSystem.BankReward(CurrentRunRewardResult.TotalRewardValue);
+                pendingPlaytestDeathCause = PlaytestDeathCause.None;
             }
 
             if (newState == RunState.RunRestarting)
@@ -825,6 +947,10 @@ namespace TapMiner.Core
             }
 
             upgradePersistenceSystem.BankReward(rewardValue);
+            playtestInstrumentationSystem.RecordMissionComplete(
+                missionLayerLiteSystem.LastCompletedTemplateId,
+                missionLayerLiteSystem.LastCompletedMissionDescription,
+                rewardValue);
         }
 
         private static string FormatMissionDebug(MissionProgress missionProgress)
