@@ -97,6 +97,20 @@ namespace TapMiner.EditorTools
             Debug.Log("[CoreLoopSmokeRunner] Requested play mode for T015 smoke.");
         }
 
+        [MenuItem("Tools/Tap Miner/Run T016 Enemy Hazard Smoke")]
+        public static void RunT016EnemyHazardSmoke()
+        {
+            if (IsRunning())
+            {
+                Debug.LogWarning("[CoreLoopSmokeRunner] Smoke run is already active.");
+                return;
+            }
+
+            SetRunning(true);
+            EditorApplication.isPlaying = true;
+            Debug.Log("[CoreLoopSmokeRunner] Requested play mode for T016 smoke.");
+        }
+
         private static void HandlePlayModeStateChanged(PlayModeStateChange state)
         {
             if (!IsRunning())
@@ -339,6 +353,19 @@ namespace TapMiner.EditorTools
                 {
                     Debug.Log($"[CoreLoopSmokeRunner] T015 segment summary -> {bootstrap.GetSegmentSummary(index)}");
                 }
+            }));
+
+            Steps.Enqueue(new SmokeStep("Report T016 enemy hazard coverage", bootstrap => bootstrap.CurrentRunState == RunState.RunActive, 0.1d, bootstrap =>
+            {
+                Debug.Log(
+                    $"[CoreLoopSmokeRunner] T016 enemy hazard coverage -> EnemyHazardSegments={bootstrap.CurrentEnemyHazardVariantCount} | UniqueVariations={bootstrap.CurrentUniqueSegmentVariationCount}");
+            }));
+
+            Steps.Enqueue(new SmokeStep("Report T016 stationary vs enemy hazard", bootstrap => bootstrap.CurrentRunState == RunState.RunActive, 0.1d, bootstrap =>
+            {
+                Debug.Log($"[CoreLoopSmokeRunner] T016 stationary sample -> {bootstrap.GetSegmentSummary(0)}");
+                Debug.Log($"[CoreLoopSmokeRunner] T016 enemy sample A -> {bootstrap.GetSegmentSummary(4)}");
+                Debug.Log($"[CoreLoopSmokeRunner] T016 enemy sample B -> {bootstrap.GetSegmentSummary(6)}");
             }));
         }
 

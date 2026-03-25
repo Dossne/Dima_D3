@@ -82,6 +82,9 @@ namespace TapMiner.Core
         [SerializeField]
         private int debugUniqueSegmentVariationCount;
 
+        [SerializeField]
+        private int debugEnemyHazardVariantCount;
+
         [Header("Break Runtime")]
         [SerializeField]
         private int debugActiveSegmentIndex;
@@ -215,6 +218,7 @@ namespace TapMiner.Core
         public bool IsLaneTransitioning => laneTransitionController.IsTransitioning;
         public int CurrentSpawnedSegmentCount => segmentSpawnSystem.SpawnedSegments.Count;
         public int CurrentUniqueSegmentVariationCount => segmentSpawnSystem.GetUniqueVariationCount();
+        public int CurrentEnemyHazardVariantCount => segmentSpawnSystem.GetEnemyHazardVariantCount();
         public BreakResolutionResult LastBreakResolutionResult => breakableBlockResolutionSystem.LastResolutionResult;
         public LootResolutionResult LastLootResolutionResult => lootDropResolutionSystem.LastResolutionResult;
         public RunRewardResult CurrentRunRewardResult => runRewardAggregationSystem.CurrentRewardResult;
@@ -388,7 +392,7 @@ namespace TapMiner.Core
             var descriptor = segmentSpawnSystem.SpawnedSegments[segmentIndex];
             var rewardLaneText = descriptor.HasRewardPath ? descriptor.RewardLaneIndex.ToString() : "none";
             return
-                $"Index={descriptor.SegmentIndex} | Bucket={descriptor.DepthBucket} | Type={descriptor.SegmentType} | Variation={descriptor.VariationId} | Safe={descriptor.SafeLaneIndex} | Reward={rewardLaneText} | Hazards={FormatLaneMask(descriptor.HazardLaneMask)} | Breakables={FormatLaneMask(descriptor.BreakableLaneMask)} | SafePresentation={descriptor.SafePathPresentation} | RewardPresentation={descriptor.RewardPresentation} | HazardPresentation={descriptor.HazardPresentation}";
+                $"Index={descriptor.SegmentIndex} | Bucket={descriptor.DepthBucket} | Type={descriptor.SegmentType} | Variation={descriptor.VariationId} | EnemyHazard={descriptor.EnemyHazardVariantId} | Safe={descriptor.SafeLaneIndex} | Reward={rewardLaneText} | Hazards={FormatLaneMask(descriptor.HazardLaneMask)} | Breakables={FormatLaneMask(descriptor.BreakableLaneMask)} | SafePresentation={descriptor.SafePathPresentation} | RewardPresentation={descriptor.RewardPresentation} | HazardPresentation={descriptor.HazardPresentation} | EnemyBehavior={descriptor.EnemyHazardBehavior} | EnemyReadability={descriptor.EnemyHazardReadabilityNote} | Telegraph={descriptor.EnemyHazardTelegraphSeconds:0.00} | Repeat={descriptor.EnemyHazardRepeatSeconds:0.00}";
         }
 
         public HazardContactResult RequestResolveCurrentLaneHazardContact()
@@ -701,6 +705,7 @@ namespace TapMiner.Core
             debugFirstSegmentSafeLaneIndex = firstSegment.SafeLaneIndex;
             debugFirstSegmentVariationId = firstSegment.VariationId;
             debugUniqueSegmentVariationCount = segmentSpawnSystem.GetUniqueVariationCount();
+            debugEnemyHazardVariantCount = segmentSpawnSystem.GetEnemyHazardVariantCount();
             debugCurrentSegmentBreakableTargetCount =
                 breakableBlockResolutionSystem.GetRemainingBreakableTargetCount(debugActiveSegmentIndex);
             debugLastBreakResolutionResult = breakableBlockResolutionSystem.LastResolutionResult;

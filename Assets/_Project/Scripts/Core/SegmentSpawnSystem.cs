@@ -53,6 +53,11 @@ namespace TapMiner.Core
                 bucket,
                 segmentType,
                 variationProfile.VariationId,
+                variationProfile.EnemyHazardProfile.VariantId,
+                variationProfile.EnemyHazardProfile.BehaviorLabel,
+                variationProfile.EnemyHazardProfile.ReadabilityNote,
+                variationProfile.EnemyHazardProfile.TelegraphSeconds,
+                variationProfile.EnemyHazardProfile.RepeatSeconds,
                 variationProfile.SafePathPresentation,
                 variationProfile.RewardPresentation,
                 variationProfile.HazardPresentation,
@@ -73,6 +78,21 @@ namespace TapMiner.Core
             }
 
             return uniqueVariations.Count;
+        }
+
+        public int GetEnemyHazardVariantCount()
+        {
+            var count = 0;
+
+            for (var index = 0; index < spawnedSegments.Count; index += 1)
+            {
+                if (spawnedSegments[index].HasEnemyHazardVariant)
+                {
+                    count += 1;
+                }
+            }
+
+            return count;
         }
 
         private static DepthBucket ResolveDepthBucket(int segmentIndex)
@@ -262,6 +282,24 @@ namespace TapMiner.Core
             if (descriptor.HasBreakableOnSafeLane)
             {
                 throw new InvalidOperationException("Breakable target cannot exist on the safe lane.");
+            }
+
+            if (descriptor.HasEnemyHazardVariant)
+            {
+                if (descriptor.BreakableTargetCount <= 0)
+                {
+                    throw new InvalidOperationException("Enemy hazard variant requires at least one legal hazard lane.");
+                }
+
+                if (descriptor.EnemyHazardTelegraphSeconds < 0.4f)
+                {
+                    throw new InvalidOperationException("Enemy hazard telegraph is below readability floor.");
+                }
+
+                if (descriptor.EnemyHazardRepeatSeconds <= descriptor.EnemyHazardTelegraphSeconds)
+                {
+                    throw new InvalidOperationException("Enemy hazard repeat timing must preserve a readable window.");
+                }
             }
 
             if (descriptor.HasRewardPath)

@@ -13,6 +13,11 @@ namespace TapMiner.Core
             DepthBucket depthBucket,
             SegmentType segmentType,
             SegmentVariationId variationId,
+            EnemyHazardVariantId enemyHazardVariantId,
+            string enemyHazardBehavior,
+            string enemyHazardReadabilityNote,
+            float enemyHazardTelegraphSeconds,
+            float enemyHazardRepeatSeconds,
             string safePathPresentation,
             string rewardPresentation,
             string hazardPresentation,
@@ -26,6 +31,11 @@ namespace TapMiner.Core
             DepthBucket = depthBucket;
             SegmentType = segmentType;
             VariationId = variationId;
+            EnemyHazardVariantId = enemyHazardVariantId;
+            EnemyHazardBehavior = enemyHazardBehavior;
+            EnemyHazardReadabilityNote = enemyHazardReadabilityNote;
+            EnemyHazardTelegraphSeconds = enemyHazardTelegraphSeconds;
+            EnemyHazardRepeatSeconds = enemyHazardRepeatSeconds;
             SafePathPresentation = safePathPresentation;
             RewardPresentation = rewardPresentation;
             HazardPresentation = hazardPresentation;
@@ -40,6 +50,11 @@ namespace TapMiner.Core
         public DepthBucket DepthBucket { get; }
         public SegmentType SegmentType { get; }
         public SegmentVariationId VariationId { get; }
+        public EnemyHazardVariantId EnemyHazardVariantId { get; }
+        public string EnemyHazardBehavior { get; }
+        public string EnemyHazardReadabilityNote { get; }
+        public float EnemyHazardTelegraphSeconds { get; }
+        public float EnemyHazardRepeatSeconds { get; }
         public string SafePathPresentation { get; }
         public string RewardPresentation { get; }
         public string HazardPresentation { get; }
@@ -48,6 +63,7 @@ namespace TapMiner.Core
         public int RewardLaneIndex { get; }
         public bool[] HazardLaneMask { get; }
         public bool[] BreakableLaneMask { get; }
+        public bool HasEnemyHazardVariant => EnemyHazardVariantId != EnemyHazardVariantId.None;
         public bool HasHazardOnSafeLane => HazardLaneMask[SafeLaneIndex];
         public bool HasBreakableOnSafeLane => BreakableLaneMask[SafeLaneIndex];
 
