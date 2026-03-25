@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace TapMiner.Core
 {
@@ -197,6 +198,28 @@ namespace TapMiner.Core
         [SerializeField]
         private int debugLastCompletedSegmentIndex = -1;
 
+        [Header("Feedback Runtime")]
+        [SerializeField]
+        private string debugCurrentFeedbackText = string.Empty;
+
+        [SerializeField]
+        private Color debugCurrentFeedbackColor = Color.white;
+
+        [SerializeField]
+        private bool debugFeedbackActive;
+
+        [SerializeField]
+        private AudioClip laneTransitionFeedbackClip;
+
+        [SerializeField]
+        private AudioClip breakFeedbackClip;
+
+        [SerializeField]
+        private AudioClip lootFeedbackClip;
+
+        [SerializeField]
+        private AudioClip hazardFeedbackClip;
+
         private RunStateMachine runStateMachine = null!;
         private SwipeInputInterpreter swipeInputInterpreter = null!;
         private LaneTransitionController laneTransitionController = null!;
@@ -208,6 +231,12 @@ namespace TapMiner.Core
         private UpgradePersistenceSystem upgradePersistenceSystem = null!;
         private RunHealthSystem runHealthSystem = null!;
         private MissionLayerLiteSystem missionLayerLiteSystem = null!;
+        private Text feedbackText = null!;
+        private AudioSource feedbackAudioSource = null!;
+        private string defaultFeedbackText = "Bootstrap OK";
+        private Color defaultFeedbackColor = Color.white;
+        private Vector3 defaultFeedbackScale = Vector3.one;
+        private float feedbackTimerSeconds;
 
         public RunState CurrentRunState => runStateMachine.CurrentState;
         public int CurrentRunContextId => runStateMachine.CurrentRunContextId;
@@ -230,6 +259,8 @@ namespace TapMiner.Core
         public float CurrentLaneTransitionDurationSeconds => laneTransitionController.CurrentTransitionDurationSeconds;
         public int LastGrantedMissionReward => missionLayerLiteSystem.LastGrantedRewardValue;
         public int TotalMissionRewardsGranted => missionLayerLiteSystem.TotalMissionRewardsGranted;
+        public string CurrentFeedbackText => feedbackText != null ? feedbackText.text : string.Empty;
+        public bool IsFeedbackActive => feedbackTimerSeconds > 0f;
 
         private void Awake()
         {
@@ -256,6 +287,7 @@ namespace TapMiner.Core
             hazardContactResolutionSystem.ResetForRun(CurrentRunContextId, segmentSpawnSystem.SpawnedSegments);
             ApplyUpgradeStatsToRuntime();
             ResetHealthForCurrentRun();
+            SetupFeedbackHooks();
 
             SyncDebugState();
 
@@ -283,6 +315,8 @@ namespace TapMiner.Core
             {
                 HandleMovementSwipe(direction);
             }
+
+            TickFeedback(Time.deltaTime);
             ProcessDebugCommands();
             SyncDebugState();
         }
@@ -474,7 +508,13 @@ namespace TapMiner.Core
                 return false;
             }
 
-            return laneTransitionController.TryStartTransition(direction);
+            var result = laneTransitionController.TryStartTransition(direction);
+            if (result)
+            {
+                TriggerFeedback("SHIFT", new Color(0.45f, 0.8f, 1f, 1f), 0.18f, laneTransitionFeedbackClip);
+            }
+
+            return result;
         }
 
         private bool TryProcessCurrentSegment()
@@ -526,6 +566,20 @@ namespace TapMiner.Core
 
             if (breakResult == BreakResolutionResult.BreakSucceeded)
             {
+                if (lootDropResolutionSystem.LastResolutionResult == LootResolutionResult.LootGranted &&
+                    lootDropResolutionSystem.LastGrantedLoot != null)
+                {
+                    TriggerFeedback(
+                        $"BREAK +{lootDropResolutionSystem.LastGrantedLoot.LootValue}",
+                        new Color(1f, 0.84f, 0.25f, 1f),
+                        0.26f,
+                        lootFeedbackClip != null ? lootFeedbackClip : breakFeedbackClip);
+                }
+                else
+                {
+                    TriggerFeedback("BREAK", new Color(1f, 0.85f, 0.3f, 1f), 0.22f, breakFeedbackClip);
+                }
+
                 ApplyMissionReward(missionLayerLiteSystem.RecordBreakSuccess());
             }
 
@@ -550,6 +604,8 @@ namespace TapMiner.Core
 
             if (hazardResult == HazardContactResult.HazardContactResolved)
             {
+                TriggerFeedback("HIT", new Color(1f, 0.35f, 0.35f, 1f), 0.28f, hazardFeedbackClip);
+
                 var acceptedDamage = runHealthSystem.TryApplyDamage(
                     damageAmount: 1,
                     canApplyDamage: runStateMachine.IsDamageProcessingEnabled,
@@ -742,6 +798,9 @@ namespace TapMiner.Core
             debugLastCompletedMissionTemplate = missionLayerLiteSystem.LastCompletedTemplateId;
             debugLastGrantedMissionReward = missionLayerLiteSystem.LastGrantedRewardValue;
             debugTotalMissionRewardsGranted = missionLayerLiteSystem.TotalMissionRewardsGranted;
+            debugCurrentFeedbackText = feedbackText != null ? feedbackText.text : string.Empty;
+            debugCurrentFeedbackColor = feedbackText != null ? feedbackText.color : Color.white;
+            debugFeedbackActive = IsFeedbackActive;
         }
 
         private void ApplyUpgradeStatsToRuntime()
@@ -776,6 +835,68 @@ namespace TapMiner.Core
         private static string FormatLaneMask(bool[] laneMask)
         {
             return $"{(laneMask[0] ? 1 : 0)}{(laneMask[1] ? 1 : 0)}{(laneMask[2] ? 1 : 0)}";
+        }
+
+        private void SetupFeedbackHooks()
+        {
+            feedbackText = GameObject.Find("BootstrapStatusText")?.GetComponent<Text>();
+            if (feedbackText != null)
+            {
+                defaultFeedbackText = feedbackText.text;
+                defaultFeedbackColor = feedbackText.color;
+                defaultFeedbackScale = feedbackText.rectTransform.localScale;
+            }
+
+            feedbackAudioSource = GetComponent<AudioSource>();
+            if (feedbackAudioSource == null)
+            {
+                feedbackAudioSource = gameObject.AddComponent<AudioSource>();
+                feedbackAudioSource.playOnAwake = false;
+                feedbackAudioSource.loop = false;
+                feedbackAudioSource.spatialBlend = 0f;
+                feedbackAudioSource.volume = 0.65f;
+            }
+        }
+
+        private void TriggerFeedback(string message, Color color, float durationSeconds, AudioClip clip)
+        {
+            if (feedbackText == null)
+            {
+                return;
+            }
+
+            feedbackText.text = message;
+            feedbackText.color = color;
+            feedbackText.rectTransform.localScale = defaultFeedbackScale * 1.08f;
+            feedbackTimerSeconds = Mathf.Max(0.01f, durationSeconds);
+
+            if (clip != null && feedbackAudioSource != null)
+            {
+                feedbackAudioSource.PlayOneShot(clip);
+            }
+        }
+
+        private void TickFeedback(float deltaTime)
+        {
+            if (feedbackText == null || feedbackTimerSeconds <= 0f)
+            {
+                return;
+            }
+
+            feedbackTimerSeconds = Mathf.Max(0f, feedbackTimerSeconds - Mathf.Max(0f, deltaTime));
+            feedbackText.rectTransform.localScale = Vector3.Lerp(
+                feedbackText.rectTransform.localScale,
+                defaultFeedbackScale,
+                16f * Mathf.Max(0f, deltaTime));
+
+            if (feedbackTimerSeconds > 0f)
+            {
+                return;
+            }
+
+            feedbackText.text = defaultFeedbackText;
+            feedbackText.color = defaultFeedbackColor;
+            feedbackText.rectTransform.localScale = defaultFeedbackScale;
         }
     }
 }

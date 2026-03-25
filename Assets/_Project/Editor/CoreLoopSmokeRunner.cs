@@ -111,6 +111,20 @@ namespace TapMiner.EditorTools
             Debug.Log("[CoreLoopSmokeRunner] Requested play mode for T016 smoke.");
         }
 
+        [MenuItem("Tools/Tap Miner/Run T017 Feedback Smoke")]
+        public static void RunT017FeedbackSmoke()
+        {
+            if (IsRunning())
+            {
+                Debug.LogWarning("[CoreLoopSmokeRunner] Smoke run is already active.");
+                return;
+            }
+
+            SetRunning(true);
+            EditorApplication.isPlaying = true;
+            Debug.Log("[CoreLoopSmokeRunner] Requested play mode for T017 smoke.");
+        }
+
         private static void HandlePlayModeStateChanged(PlayModeStateChange state)
         {
             if (!IsRunning())
@@ -192,14 +206,14 @@ namespace TapMiner.EditorTools
             {
                 var result = bootstrap.RequestLaneTransitionLeft();
                 bootstrap.DebugAdvanceRuntimeLoop(0.2f);
-                Debug.Log($"[CoreLoopSmokeRunner] Move left -> {result} | Lane={bootstrap.CurrentCommittedLaneIndex} | Transitioning={bootstrap.IsLaneTransitioning}");
+                Debug.Log($"[CoreLoopSmokeRunner] Move left -> {result} | Lane={bootstrap.CurrentCommittedLaneIndex} | Transitioning={bootstrap.IsLaneTransitioning} | Feedback={bootstrap.CurrentFeedbackText} | Active={bootstrap.IsFeedbackActive}");
             }));
 
             Steps.Enqueue(new SmokeStep("Process segment 0", bootstrap => bootstrap.CurrentRunState == RunState.RunActive && !bootstrap.IsLaneTransitioning && bootstrap.CurrentCommittedLaneIndex == 0, 0.2d, bootstrap =>
             {
                 var result = bootstrap.RequestProcessCurrentSegment();
                 Debug.Log(
-                    $"[CoreLoopSmokeRunner] Process segment 0 -> {result} | Lane={bootstrap.CurrentCommittedLaneIndex} | Break={bootstrap.LastBreakResolutionResult} | Loot={bootstrap.LastLootResolutionResult} | RunReward={bootstrap.CurrentRunRewardResult.TotalRewardValue} | RewardCount={bootstrap.CurrentRunRewardResult.GrantedLootCount}");
+                    $"[CoreLoopSmokeRunner] Process segment 0 -> {result} | Lane={bootstrap.CurrentCommittedLaneIndex} | Break={bootstrap.LastBreakResolutionResult} | Loot={bootstrap.LastLootResolutionResult} | RunReward={bootstrap.CurrentRunRewardResult.TotalRewardValue} | RewardCount={bootstrap.CurrentRunRewardResult.GrantedLootCount} | Feedback={bootstrap.CurrentFeedbackText} | Active={bootstrap.IsFeedbackActive}");
             }));
 
             Steps.Enqueue(new SmokeStep("Move right to center", bootstrap => bootstrap.CurrentRunState == RunState.RunActive && !bootstrap.IsLaneTransitioning && bootstrap.CurrentCommittedLaneIndex == 0, 0.2d, bootstrap =>
@@ -220,7 +234,7 @@ namespace TapMiner.EditorTools
             {
                 var result = bootstrap.RequestResolveCurrentLaneHazardContact();
                 Debug.Log(
-                    $"[CoreLoopSmokeRunner] Resolve hazard -> {result} | RunState={bootstrap.CurrentRunState} | Lane={bootstrap.CurrentCommittedLaneIndex}");
+                    $"[CoreLoopSmokeRunner] Resolve hazard -> {result} | RunState={bootstrap.CurrentRunState} | Lane={bootstrap.CurrentCommittedLaneIndex} | Feedback={bootstrap.CurrentFeedbackText} | Active={bootstrap.IsFeedbackActive}");
             }));
 
             Steps.Enqueue(new SmokeStep("Restart run", bootstrap => bootstrap.CurrentRunState == RunState.RunDeathResolved, 0.2d, bootstrap =>
