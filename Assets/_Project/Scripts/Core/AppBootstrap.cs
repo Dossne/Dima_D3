@@ -67,11 +67,25 @@ namespace TapMiner.Core
         [SerializeField]
         private int debugSuccessfulBreakCount;
 
+        [Header("Loot Runtime")]
+        [SerializeField]
+        private LootResolutionResult debugLastLootResolutionResult;
+
+        [SerializeField]
+        private int debugSuccessfulLootDropCount;
+
+        [SerializeField]
+        private int debugTotalGrantedLootValue;
+
+        [SerializeField]
+        private int debugLastGrantedLootValue;
+
         private RunStateMachine runStateMachine = null!;
         private SwipeInputInterpreter swipeInputInterpreter = null!;
         private LaneTransitionController laneTransitionController = null!;
         private SegmentSpawnSystem segmentSpawnSystem = null!;
         private BreakableBlockResolutionSystem breakableBlockResolutionSystem = null!;
+        private LootDropResolutionSystem lootDropResolutionSystem = null!;
 
         public RunState CurrentRunState => runStateMachine.CurrentState;
         public int CurrentRunContextId => runStateMachine.CurrentRunContextId;
@@ -82,6 +96,7 @@ namespace TapMiner.Core
         public bool IsLaneTransitioning => laneTransitionController.IsTransitioning;
         public int CurrentSpawnedSegmentCount => segmentSpawnSystem.SpawnedSegments.Count;
         public BreakResolutionResult LastBreakResolutionResult => breakableBlockResolutionSystem.LastResolutionResult;
+        public LootResolutionResult LastLootResolutionResult => lootDropResolutionSystem.LastResolutionResult;
 
         private void Awake()
         {
@@ -95,8 +110,10 @@ namespace TapMiner.Core
                 initialLaneIndex);
             segmentSpawnSystem = new SegmentSpawnSystem(initialSegmentBatchCount);
             breakableBlockResolutionSystem = new BreakableBlockResolutionSystem();
+            lootDropResolutionSystem = new LootDropResolutionSystem();
             segmentSpawnSystem.ResetForRun();
             breakableBlockResolutionSystem.ResetForRun(segmentSpawnSystem.SpawnedSegments);
+            lootDropResolutionSystem.ResetForRun(CurrentRunContextId);
 
             SyncDebugState();
 
@@ -190,14 +207,20 @@ namespace TapMiner.Core
 
         private BreakResolutionResult TryResolveBreakAtLane(int laneIndex)
         {
-            var result = breakableBlockResolutionSystem.TryResolveBreak(
+            var breakResult = breakableBlockResolutionSystem.TryResolveBreak(
                 debugActiveSegmentIndex,
                 laneIndex,
                 CurrentCommittedLaneIndex,
                 runStateMachine.CanAcceptGameplayInput());
 
+            lootDropResolutionSystem.TryResolveLoot(
+                breakResult,
+                CurrentRunContextId,
+                debugActiveSegmentIndex,
+                laneIndex);
+
             SyncDebugState();
-            return result;
+            return breakResult;
         }
 
         private void HandleStateChanged(RunState previousState, RunState newState)
@@ -212,6 +235,11 @@ namespace TapMiner.Core
             else if (newState != RunState.RunActive)
             {
                 laneTransitionController.CancelActiveTransition();
+            }
+
+            if (newState == RunState.RunActive && previousState != RunState.RunActive)
+            {
+                lootDropResolutionSystem.ResetForRun(CurrentRunContextId);
             }
 
             SyncDebugState();
@@ -244,6 +272,12 @@ namespace TapMiner.Core
                 breakableBlockResolutionSystem.GetRemainingBreakableTargetCount(debugActiveSegmentIndex);
             debugLastBreakResolutionResult = breakableBlockResolutionSystem.LastResolutionResult;
             debugSuccessfulBreakCount = breakableBlockResolutionSystem.SuccessfulBreakCount;
+            debugLastLootResolutionResult = lootDropResolutionSystem.LastResolutionResult;
+            debugSuccessfulLootDropCount = lootDropResolutionSystem.SuccessfulLootDropCount;
+            debugTotalGrantedLootValue = lootDropResolutionSystem.TotalGrantedLootValue;
+            debugLastGrantedLootValue = lootDropResolutionSystem.LastGrantedLoot != null
+                ? lootDropResolutionSystem.LastGrantedLoot.LootValue
+                : 0;
         }
     }
 }
