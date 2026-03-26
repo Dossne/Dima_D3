@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace TapMiner.Core
@@ -16,12 +17,7 @@ namespace TapMiner.Core
 
         [Header("Lane Runtime")]
         [SerializeField]
-        private Vector3[] laneLocalPositions =
-        {
-            new Vector3(-2f, 0f, 0f),
-            Vector3.zero,
-            new Vector3(2f, 0f, 0f)
-        };
+        private Vector3[] laneLocalPositions = null!;
 
         [SerializeField]
         private int initialLaneIndex = 1;
@@ -281,6 +277,15 @@ namespace TapMiner.Core
 
         private void Awake()
         {
+            var mainCamera = Camera.main;
+            var hw = mainCamera != null ? mainCamera.orthographicSize * mainCamera.aspect : 2f;
+            laneLocalPositions = new[]
+            {
+                new Vector3(-hw * 0.46f, 0f, 0f),
+                new Vector3(0f, 0f, 0f),
+                new Vector3(hw * 0.46f, 0f, 0f)
+            };
+
             runStateMachine = new RunStateMachine();
             runStateMachine.StateChanged += HandleStateChanged;
             swipeInputInterpreter = new SwipeInputInterpreter(minimumSwipeDistancePixels);
@@ -288,8 +293,12 @@ namespace TapMiner.Core
             runHealthSystem = new RunHealthSystem();
             missionLayerLiteSystem = new MissionLayerLiteSystem();
             playtestInstrumentationSystem = new PlaytestInstrumentationSystem();
+            var runPresentationController = GetComponent<RunPresentationController>();
+            var laneHostTransform = runPresentationController != null
+                ? runPresentationController.GetPlayerTransform()
+                : transform;
             laneTransitionController = new LaneTransitionController(
-                transform,
+                laneHostTransform,
                 laneLocalPositions,
                 laneTransitionDurationSeconds,
                 initialLaneIndex);
@@ -312,6 +321,7 @@ namespace TapMiner.Core
             Debug.Log($"[AppBootstrap] Started v{bootstrapVersion}");
             Debug.Log($"[AppBootstrap] Run state authority initialized in {CurrentRunState} (context {CurrentRunContextId}).");
             Debug.Log($"[AppBootstrap] Segment batch prepared with {CurrentSpawnedSegmentCount} legal segments.");
+            Debug.Log($"[BOOT] Initial run state: {runStateMachine.CurrentState}"); // TM-BUILD-13-TEMP
         }
 
         private void Update()
@@ -334,6 +344,7 @@ namespace TapMiner.Core
 
             if (swipeInputInterpreter.TryConsumeSwipeDirection(out var direction))
             {
+                Debug.Log($"[INPUT] Swipe consumed: {direction} | overUI={IsPointerOverUi()}"); // TM-BUILD-15-TEMP
                 HandleMovementSwipe(direction);
             }
 
@@ -345,17 +356,21 @@ namespace TapMiner.Core
         private static bool IsPointerOverUi()
         {
             var eventSystem = EventSystem.current;
-            if (eventSystem == null)
+            var touch = Touchscreen.current;
+            if (touch != null && touch.primaryTouch.press.isPressed)
             {
-                return false;
+                return eventSystem != null &&
+                       eventSystem.IsPointerOverGameObject(0);
             }
 
-            if (Input.touchCount > 0)
+            var mouse = Mouse.current;
+            if (mouse != null && mouse.leftButton.isPressed)
             {
-                return eventSystem.IsPointerOverGameObject(Input.GetTouch(0).fingerId);
+                return eventSystem != null &&
+                       eventSystem.IsPointerOverGameObject();
             }
 
-            return eventSystem.IsPointerOverGameObject();
+            return false;
         }
 
         private void OnDestroy()
@@ -614,6 +629,7 @@ namespace TapMiner.Core
 
         private bool HandleMovementSwipe(int direction)
         {
+            Debug.Log($"[SWIPE] HandleMovementSwipe called: {direction}"); // TM-BUILD-15-TEMP
             if (!runStateMachine.CanAcceptGameplayInput())
             {
                 return false;

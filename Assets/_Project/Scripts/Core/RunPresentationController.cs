@@ -143,6 +143,17 @@ namespace TapMiner.Core
             isUpgradePanelOpen = false;
         }
 
+        public Transform GetPlayerTransform()
+        {
+            if (playerVisualRoot == null)
+            {
+                playerVisualRoot = FindOrCreate("PlayerVisualRoot", transform).transform;
+                playerVisualRoot.localPosition = new Vector3(0f, -1.95f, -0.3f);
+            }
+
+            return playerVisualRoot;
+        }
+
         private void EnsureCamera()
         {
             if (mainCamera == null)
@@ -208,6 +219,7 @@ namespace TapMiner.Core
                 "HitFlash",
                 canvasObject.transform,
                 new Color(1f, 0.22f, 0.18f, 0f));
+            hitFlashImage.raycastTarget = false;
             StretchRect(hitFlashImage.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
             depthText = EnsureText(
@@ -232,6 +244,7 @@ namespace TapMiner.Core
                 "CollapseBar",
                 canvasObject.transform,
                 new Color(0.1f, 0.11f, 0.15f, 0.92f));
+            collapseBar.raycastTarget = false;
             StretchRect(collapseBar.rectTransform, new Vector2(0.08f, 0.86f), new Vector2(0.92f, 0.895f), Vector2.zero, Vector2.zero);
             collapseFrameImage = collapseBar;
 
@@ -239,6 +252,7 @@ namespace TapMiner.Core
                 "CollapseBarFill",
                 collapseBar.transform,
                 new Color(0.25f, 0.82f, 0.46f, 0.95f));
+            collapseFillImage.raycastTarget = false;
             collapseFillImage.type = Image.Type.Filled;
             collapseFillImage.fillMethod = Image.FillMethod.Horizontal;
             collapseFillImage.fillOrigin = 0;
@@ -256,12 +270,14 @@ namespace TapMiner.Core
 
             resultsOverlay = FindOrCreate("MainMenuOverlay", canvasObject.transform);
             resultsOverlayImage = EnsureImageComponent(resultsOverlay, new Color(0.04f, 0.05f, 0.08f, 0f));
+            resultsOverlayImage.raycastTarget = false;
             StretchRect(resultsOverlayImage.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
             var resultsPanel = EnsureImage(
                 "MainMenuPanel",
                 resultsOverlay.transform,
                 new Color(0.12f, 0.13f, 0.18f, 0.96f));
+            resultsPanel.raycastTarget = false;
             StretchRect(resultsPanel.rectTransform, new Vector2(0.14f, 0.23f), new Vector2(0.86f, 0.74f), Vector2.zero, Vector2.zero);
             resultsPanelImage = resultsPanel;
 
@@ -362,6 +378,7 @@ namespace TapMiner.Core
 
             upgradePanel = FindOrCreate("UpgradePanel", resultsPanel.transform);
             var upgradePanelImage = EnsureImageComponent(upgradePanel, new Color(0.09f, 0.11f, 0.15f, 0.98f));
+            upgradePanelImage.raycastTarget = false;
             StretchRect(upgradePanelImage.rectTransform, new Vector2(0.05f, 0.05f), new Vector2(0.95f, 0.95f), Vector2.zero, Vector2.zero);
 
             var upgradeTitleText = EnsureText(
@@ -419,42 +436,45 @@ namespace TapMiner.Core
 
         private void CreateBackdrop()
         {
+            var visibleHalfWidth = GetVisibleHalfWidth();
             var backdrop = CreatePrimitive("Backdrop", PrimitiveType.Quad, runtimeRoot.transform);
             backdrop.transform.localPosition = new Vector3(0f, 0.4f, 6f);
-            backdrop.transform.localScale = new Vector3(8.6f, 10.8f, 1f);
+            backdrop.transform.localScale = new Vector3(visibleHalfWidth * 1.98f, 10.8f, 1f);
             SetRendererColor(backdrop, new Color(0.08f, 0.1f, 0.13f, 1f));
 
             var tunnelGlow = CreatePrimitive("TunnelGlow", PrimitiveType.Quad, runtimeRoot.transform);
             tunnelGlow.transform.localPosition = new Vector3(0f, -0.3f, 5.5f);
-            tunnelGlow.transform.localScale = new Vector3(7.6f, 8.9f, 1f);
+            tunnelGlow.transform.localScale = new Vector3(visibleHalfWidth * 1.75f, 8.9f, 1f);
             SetRendererColor(tunnelGlow, new Color(0.14f, 0.17f, 0.21f, 1f));
 
             var floor = CreatePrimitive("MineFloor", PrimitiveType.Cube, runtimeRoot.transform);
             floor.transform.localPosition = new Vector3(0f, -4.3f, 1f);
-            floor.transform.localScale = new Vector3(10f, 1.25f, 1f);
+            floor.transform.localScale = new Vector3(visibleHalfWidth * 2.30f, 1.25f, 1f);
             SetRendererColor(floor, new Color(0.17f, 0.14f, 0.12f, 1f));
         }
 
         private void CreateMineFrame()
         {
+            var visibleHalfWidth = GetVisibleHalfWidth();
             var leftWall = CreatePrimitive("LeftWall", PrimitiveType.Cube, runtimeRoot.transform);
-            leftWall.transform.localPosition = new Vector3(-4.35f, -0.1f, 0.8f);
+            leftWall.transform.localPosition = new Vector3(-visibleHalfWidth, -0.1f, 0.8f);
             leftWall.transform.localScale = new Vector3(0.55f, 8.8f, 0.8f);
             SetRendererColor(leftWall, new Color(0.24f, 0.2f, 0.17f, 1f));
 
             var rightWall = CreatePrimitive("RightWall", PrimitiveType.Cube, runtimeRoot.transform);
-            rightWall.transform.localPosition = new Vector3(4.35f, -0.1f, 0.8f);
+            rightWall.transform.localPosition = new Vector3(visibleHalfWidth, -0.1f, 0.8f);
             rightWall.transform.localScale = new Vector3(0.55f, 8.8f, 0.8f);
             SetRendererColor(rightWall, new Color(0.24f, 0.2f, 0.17f, 1f));
 
             var ceiling = CreatePrimitive("MineCeiling", PrimitiveType.Cube, runtimeRoot.transform);
             ceiling.transform.localPosition = new Vector3(0f, 4.35f, 0.8f);
-            ceiling.transform.localScale = new Vector3(9.4f, 0.5f, 0.8f);
+            ceiling.transform.localScale = new Vector3(visibleHalfWidth * 2.16f, 0.5f, 0.8f);
             SetRendererColor(ceiling, new Color(0.26f, 0.2f, 0.16f, 1f));
         }
 
         private void CreateLaneGuides()
         {
+            var visibleHalfWidth = GetVisibleHalfWidth();
             laneRenderers = new Renderer[3];
             laneGlowRenderers = new Renderer[3];
             laneDividerRenderers = new Renderer[2];
@@ -462,8 +482,8 @@ namespace TapMiner.Core
             for (var laneIndex = 0; laneIndex < 3; laneIndex += 1)
             {
                 var lane = CreatePrimitive($"Lane_{laneIndex}", PrimitiveType.Cube, laneRoot);
-                lane.transform.localPosition = new Vector3((laneIndex - 1) * LaneSpacing, -0.45f, 0f);
-                lane.transform.localScale = new Vector3(1.5f, 7.35f, 0.15f);
+                lane.transform.localPosition = new Vector3(GetLaneXPosition(visibleHalfWidth, laneIndex), -0.45f, 0f);
+                lane.transform.localScale = new Vector3(visibleHalfWidth * 0.345f, 7.35f, 0.15f);
                 laneRenderers[laneIndex] = lane.GetComponent<Renderer>();
 
                 var glow = CreatePrimitive($"LaneGlow_{laneIndex}", PrimitiveType.Quad, lane.transform);
@@ -480,7 +500,7 @@ namespace TapMiner.Core
             for (var dividerIndex = 0; dividerIndex < laneDividerRenderers.Length; dividerIndex += 1)
             {
                 var divider = CreatePrimitive($"LaneDivider_{dividerIndex}", PrimitiveType.Quad, laneRoot);
-                divider.transform.localPosition = new Vector3((dividerIndex == 0 ? -1f : 1f) * LaneSpacing * 0.5f, -0.45f, 0.55f);
+                divider.transform.localPosition = new Vector3((dividerIndex == 0 ? -1f : 1f) * visibleHalfWidth * 0.23f, -0.45f, 0.55f);
                 divider.transform.localScale = new Vector3(0.12f, 0.94f, 1f);
                 laneDividerRenderers[dividerIndex] = divider.GetComponent<Renderer>();
                 SetRendererColor(divider, new Color(0.82f, 0.88f, 1f, 0.16f));
@@ -489,13 +509,14 @@ namespace TapMiner.Core
 
         private void CreateSegmentMarkers()
         {
+            var visibleHalfWidth = GetVisibleHalfWidth();
             markerRenderers = new Renderer[3];
             rewardRenderers = new Renderer[3];
 
             for (var laneIndex = 0; laneIndex < 3; laneIndex += 1)
             {
                 var marker = CreatePrimitive($"SegmentMarker_{laneIndex}", PrimitiveType.Cube, markerRoot);
-                marker.transform.localPosition = new Vector3((laneIndex - 1) * LaneSpacing, 1.65f, -0.2f);
+                marker.transform.localPosition = new Vector3(GetLaneXPosition(visibleHalfWidth, laneIndex), 1.65f, -0.2f);
                 marker.transform.localScale = new Vector3(1.02f, 1.18f, 0.65f);
                 markerRenderers[laneIndex] = marker.GetComponent<Renderer>();
 
@@ -508,16 +529,17 @@ namespace TapMiner.Core
 
         private void CreateCollapseCeiling()
         {
+            var visibleHalfWidth = GetVisibleHalfWidth();
             collapseRenderers = new Renderer[2];
 
             var band = CreatePrimitive("CollapseBand", PrimitiveType.Cube, collapseRoot);
             band.transform.localPosition = new Vector3(0f, 3.35f, 0.2f);
-            band.transform.localScale = new Vector3(8.8f, 0.62f, 0.4f);
+            band.transform.localScale = new Vector3(visibleHalfWidth * 2.02f, 0.62f, 0.4f);
             collapseRenderers[0] = band.GetComponent<Renderer>();
 
             var glow = CreatePrimitive("CollapseGlow", PrimitiveType.Cube, collapseRoot);
             glow.transform.localPosition = new Vector3(0f, 3.02f, 0.4f);
-            glow.transform.localScale = new Vector3(8.2f, 0.2f, 0.15f);
+            glow.transform.localScale = new Vector3(visibleHalfWidth * 1.89f, 0.2f, 0.15f);
             collapseRenderers[1] = glow.GetComponent<Renderer>();
         }
 
@@ -550,6 +572,7 @@ namespace TapMiner.Core
 
         private void UpdateWorldPresentation()
         {
+            var visibleHalfWidth = GetVisibleHalfWidth();
             var state = bootstrap.CurrentRunState;
             var segment = bootstrap.GetCurrentSegmentDescriptor();
             var completedSegments = bootstrap.CurrentCompletedSegmentCount;
@@ -629,10 +652,6 @@ namespace TapMiner.Core
                 SetRendererColor(laneDividerRenderers[dividerIndex], new Color(0.87f, 0.91f, 1f, dividerAlpha));
             }
 
-            playerVisualRoot.localPosition = new Vector3(
-                (bootstrap.CurrentCommittedLaneIndex - 1) * LaneSpacing,
-                -1.95f + Mathf.Sin(Time.time * 6.2f) * 0.03f + (breakImpulse * 0.05f) - (hitImpulse * 0.08f),
-                -0.3f);
             playerVisualRoot.localScale = new Vector3(
                 1f + (laneShiftImpulse * 0.06f) + (breakImpulse * 0.08f),
                 1f - (laneShiftImpulse * 0.05f) - (hitImpulse * 0.06f),
@@ -685,7 +704,7 @@ namespace TapMiner.Core
                     new Color(1f, 0.34f, 0.26f, 1f),
                     collapseProgress));
                 collapseRenderers[1].transform.localScale = new Vector3(
-                    8.2f,
+                    visibleHalfWidth * 1.89f,
                     0.2f + (collapseProgress * 0.12f) + (pulse * 0.03f) + (collapseSurgeImpulse * 0.12f),
                     0.15f);
             }
@@ -693,13 +712,15 @@ namespace TapMiner.Core
             if (mainCamera != null)
             {
                 var cameraOffset = new Vector3(
-                    (bootstrap.CurrentCommittedLaneIndex - 1) * 0.04f + (laneShiftImpulse * 0.07f),
+                    0f,
                     (breakImpulse * 0.05f) - (hitImpulse * 0.09f) + (collapseSurgeImpulse * 0.04f),
                     0f);
                 mainCamera.transform.position = Vector3.Lerp(
                     mainCamera.transform.position,
                     baseCameraPosition + cameraOffset,
                     14f * Time.deltaTime);
+                var p = mainCamera.transform.position;
+                mainCamera.transform.position = new Vector3(0f, p.y, p.z);
             }
         }
 
@@ -875,6 +896,7 @@ namespace TapMiner.Core
             if (resultsOverlay.activeSelf != isVisible)
             {
                 resultsOverlay.SetActive(isVisible);
+                Debug.Log($"[MENU] SetActive({isVisible}) | state={state}"); // TM-BUILD-13-TEMP
             }
 
             if (!isVisible)
@@ -1102,6 +1124,7 @@ namespace TapMiner.Core
             text.color = color;
             text.horizontalOverflow = HorizontalWrapMode.Overflow;
             text.verticalOverflow = VerticalWrapMode.Overflow;
+            text.raycastTarget = false;
             return text;
         }
 
@@ -1211,6 +1234,24 @@ namespace TapMiner.Core
             rectTransform.offsetMin = offsetMin;
             rectTransform.offsetMax = offsetMax;
             rectTransform.localScale = Vector3.one;
+        }
+
+        private float GetVisibleHalfWidth()
+        {
+            return mainCamera != null
+                ? mainCamera.orthographicSize * mainCamera.aspect
+                : 4.35f;
+        }
+
+        private static float GetLaneXPosition(float visibleHalfWidth, int laneIndex)
+        {
+            return laneIndex switch
+            {
+                0 => -visibleHalfWidth * 0.46f,
+                1 => 0f,
+                2 => visibleHalfWidth * 0.46f,
+                _ => 0f
+            };
         }
     }
 }

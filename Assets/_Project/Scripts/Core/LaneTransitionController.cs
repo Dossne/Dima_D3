@@ -49,24 +49,29 @@ namespace TapMiner.Core
             CurrentLaneIndex = initialLaneIndex;
             SourceLaneIndex = initialLaneIndex;
             targetLaneIndex = initialLaneIndex;
-            hostTransform.localPosition = laneLocalPositions[CurrentLaneIndex];
+            var target = laneLocalPositions[CurrentLaneIndex];
+            var cur = hostTransform.localPosition;
+            hostTransform.localPosition = new Vector3(target.x, cur.y, cur.z);
         }
 
         public bool TryStartTransition(int direction)
         {
             if (IsTransitioning)
             {
+                Debug.Log($"[LANE] TryStartTransition({direction}) -> result=False"); // TM-BUILD-15-TEMP
                 return false;
             }
 
             if (direction != -1 && direction != 1)
             {
+                Debug.Log($"[LANE] TryStartTransition({direction}) -> result=False"); // TM-BUILD-15-TEMP
                 return false;
             }
 
             var requestedLane = CurrentLaneIndex + direction;
             if (requestedLane < 0 || requestedLane >= laneLocalPositions.Length)
             {
+                Debug.Log($"[LANE] TryStartTransition({direction}) -> result=False"); // TM-BUILD-15-TEMP
                 return false;
             }
 
@@ -74,6 +79,7 @@ namespace TapMiner.Core
             transitionElapsedSeconds = 0f;
             SourceLaneIndex = CurrentLaneIndex;
             targetLaneIndex = requestedLane;
+            Debug.Log($"[LANE] TryStartTransition({direction}) -> result=True"); // TM-BUILD-15-TEMP
             return true;
         }
 
@@ -87,10 +93,9 @@ namespace TapMiner.Core
             transitionElapsedSeconds += Mathf.Max(0f, deltaTime);
             var normalizedTime = Mathf.Clamp01(transitionElapsedSeconds / CurrentTransitionDurationSeconds);
 
-            hostTransform.localPosition = Vector3.Lerp(
-                laneLocalPositions[SourceLaneIndex],
-                laneLocalPositions[targetLaneIndex],
-                normalizedTime);
+            var from = hostTransform.localPosition;
+            var to = new Vector3(laneLocalPositions[targetLaneIndex].x, from.y, from.z);
+            hostTransform.localPosition = Vector3.Lerp(from, to, normalizedTime);
 
             if (normalizedTime < 1f)
             {
@@ -98,7 +103,9 @@ namespace TapMiner.Core
             }
 
             CurrentLaneIndex = targetLaneIndex;
-            hostTransform.localPosition = laneLocalPositions[CurrentLaneIndex];
+            var target = laneLocalPositions[CurrentLaneIndex];
+            var cur = hostTransform.localPosition;
+            hostTransform.localPosition = new Vector3(target.x, cur.y, cur.z);
             IsTransitioning = false;
             transitionElapsedSeconds = 0f;
         }
@@ -107,7 +114,9 @@ namespace TapMiner.Core
         {
             if (!IsTransitioning)
             {
-                hostTransform.localPosition = laneLocalPositions[CurrentLaneIndex];
+                var target = laneLocalPositions[CurrentLaneIndex];
+                var cur = hostTransform.localPosition;
+                hostTransform.localPosition = new Vector3(target.x, cur.y, cur.z);
                 return;
             }
 
@@ -115,7 +124,9 @@ namespace TapMiner.Core
             transitionElapsedSeconds = 0f;
             targetLaneIndex = SourceLaneIndex;
             CurrentLaneIndex = SourceLaneIndex;
-            hostTransform.localPosition = laneLocalPositions[CurrentLaneIndex];
+            var resetTarget = laneLocalPositions[CurrentLaneIndex];
+            var resetCurrent = hostTransform.localPosition;
+            hostTransform.localPosition = new Vector3(resetTarget.x, resetCurrent.y, resetCurrent.z);
         }
     }
 }
