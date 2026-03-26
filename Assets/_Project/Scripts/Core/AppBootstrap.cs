@@ -588,7 +588,6 @@ namespace TapMiner.Core
                     RequestProcessCurrentSegment();
                     break;
                 case RunState.RunDeathResolved:
-                    RequestRestartRun();
                     break;
             }
         }

@@ -11,6 +11,7 @@ namespace TapMiner.Core
     public sealed class RunPresentationController : MonoBehaviour
     {
         private const float LaneSpacing = 2f;
+        private const string BestDepthPlayerPrefsKey = "tap_miner.best_depth";
         private static readonly Color LaneBaseColor = new Color(0.16f, 0.18f, 0.25f, 1f);
         private static readonly Color LaneCurrentColor = new Color(0.28f, 0.4f, 0.58f, 1f);
         private static readonly Color LaneSafeColor = new Color(0.16f, 0.48f, 0.34f, 1f);
@@ -49,21 +50,47 @@ namespace TapMiner.Core
         private Image collapseFillImage;
         private Image collapseFrameImage;
         private Text promptText;
+        private Text menuTitleText;
+        private Text menuSubtitleText;
+        private Text menuBestDepthText;
         private GameObject resultsOverlay;
+        private Image resultsOverlayImage;
+        private Image resultsPanelImage;
+        private Text resultsSubtitleText;
+        private Text resultsHintText;
+        private Text resultsRestartLabelText;
         private Text resultsDepthText;
         private Text resultsCoinsText;
         private Button restartButton;
+        private Button upgradesButton;
+        private Button upgradeBackButton;
+        private GameObject upgradePanel;
         private Text feedbackText;
+        private Image hitFlashImage;
 
         private int lastVisibleDepth;
         private int lastVisibleRunCoins;
+        private int bestVisibleDepth;
         private string lastFeedbackMessage = string.Empty;
         private float feedbackEmphasisTimer;
+        private float resultsTransition;
+        private int lastCommittedLaneIndex = 1;
+        private int lastRunRewardValue;
+        private int lastRunHealth;
+        private bool isUpgradePanelOpen;
+        private float laneShiftImpulse;
+        private float breakImpulse;
+        private float lootImpulse;
+        private float hitImpulse;
+        private float collapseSurgeImpulse;
+        private float hitFlashAlpha;
+        private Vector3 baseCameraPosition;
 
         private void Awake()
         {
             bootstrap = GetComponent<AppBootstrap>();
             mainCamera = Camera.main;
+            bestVisibleDepth = Mathf.Max(0, PlayerPrefs.GetInt(BestDepthPlayerPrefsKey, 0));
             EnsureCamera();
             EnsureWorldPresentation();
             EnsureCanvasPresentation();
@@ -77,19 +104,40 @@ namespace TapMiner.Core
                 return;
             }
 
+            DetectPresentationEvents();
             UpdateWorldPresentation();
             UpdateHudPresentation();
             UpdateResultsPresentation();
+            TickPresentationImpulses();
         }
 
-        public void OnRestartPressed()
+        public void OnPrimaryActionPressed()
         {
             if (bootstrap == null)
             {
                 return;
             }
 
-            bootstrap.RequestRestartRun();
+            if (bootstrap.CurrentRunState == RunState.RunDeathResolved)
+            {
+                bootstrap.RequestRestartRun();
+                return;
+            }
+
+            if (bootstrap.CurrentRunState == RunState.RunReady)
+            {
+                bootstrap.RequestStartRun();
+            }
+        }
+
+        public void OnUpgradesPressed()
+        {
+            isUpgradePanelOpen = true;
+        }
+
+        public void OnUpgradeBackPressed()
+        {
+            isUpgradePanelOpen = false;
         }
 
         private void EnsureCamera()
@@ -103,6 +151,7 @@ namespace TapMiner.Core
             mainCamera.orthographicSize = 4.85f;
             mainCamera.transform.position = new Vector3(0f, 0.15f, -10f);
             mainCamera.backgroundColor = new Color(0.03f, 0.04f, 0.06f, 1f);
+            baseCameraPosition = mainCamera.transform.position;
         }
 
         private void EnsureWorldPresentation()
@@ -152,6 +201,12 @@ namespace TapMiner.Core
                 new Color(0.97f, 0.98f, 1f, 1f));
             StretchRect(feedbackText.rectTransform, new Vector2(0.2f, 0.14f), new Vector2(0.8f, 0.2f), Vector2.zero, Vector2.zero);
 
+            hitFlashImage = EnsureImage(
+                "HitFlash",
+                canvasObject.transform,
+                new Color(1f, 0.22f, 0.18f, 0f));
+            StretchRect(hitFlashImage.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
             depthText = EnsureText(
                 "DepthLabel",
                 canvasObject.transform,
@@ -196,54 +251,161 @@ namespace TapMiner.Core
                 new Color(0.8f, 0.89f, 1f, 0.82f));
             StretchRect(promptText.rectTransform, new Vector2(0.2f, 0.78f), new Vector2(0.8f, 0.83f), Vector2.zero, Vector2.zero);
 
-            resultsOverlay = FindOrCreate("ResultsOverlay", canvasObject.transform);
-            var resultsImage = EnsureImageComponent(resultsOverlay, new Color(0.04f, 0.05f, 0.08f, 0.9f));
-            StretchRect(resultsImage.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            resultsOverlay = FindOrCreate("MainMenuOverlay", canvasObject.transform);
+            resultsOverlayImage = EnsureImageComponent(resultsOverlay, new Color(0.04f, 0.05f, 0.08f, 0f));
+            StretchRect(resultsOverlayImage.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
             var resultsPanel = EnsureImage(
-                "ResultsPanel",
+                "MainMenuPanel",
                 resultsOverlay.transform,
                 new Color(0.12f, 0.13f, 0.18f, 0.96f));
             StretchRect(resultsPanel.rectTransform, new Vector2(0.14f, 0.23f), new Vector2(0.86f, 0.74f), Vector2.zero, Vector2.zero);
+            resultsPanelImage = resultsPanel;
+
+            menuTitleText = EnsureText(
+                "MenuTitle",
+                resultsPanel.transform,
+                "TAP MINER",
+                84,
+                TextAnchor.MiddleCenter,
+                new Color(1f, 0.9f, 0.48f, 1f));
+            StretchRect(menuTitleText.rectTransform, new Vector2(0.08f, 0.75f), new Vector2(0.92f, 0.91f), Vector2.zero, Vector2.zero);
+
+            menuSubtitleText = EnsureText(
+                "MenuSubtitle",
+                resultsPanel.transform,
+                "COLLAPSE RUN",
+                34,
+                TextAnchor.MiddleCenter,
+                new Color(0.69f, 0.93f, 0.92f, 0.96f));
+            StretchRect(menuSubtitleText.rectTransform, new Vector2(0.14f, 0.67f), new Vector2(0.86f, 0.75f), Vector2.zero, Vector2.zero);
+
+            menuBestDepthText = EnsureText(
+                "BestDepthText",
+                resultsPanel.transform,
+                "BEST: 000",
+                32,
+                TextAnchor.MiddleCenter,
+                new Color(0.92f, 0.95f, 1f, 0.92f));
+            StretchRect(menuBestDepthText.rectTransform, new Vector2(0.18f, 0.59f), new Vector2(0.82f, 0.66f), Vector2.zero, Vector2.zero);
 
             var resultsTitle = EnsureText(
                 "ResultsTitle",
                 resultsPanel.transform,
-                "RUN OVER",
-                62,
+                "LAST RUN",
+                34,
                 TextAnchor.MiddleCenter,
                 new Color(1f, 0.9f, 0.48f, 1f));
-            StretchRect(resultsTitle.rectTransform, new Vector2(0.1f, 0.72f), new Vector2(0.9f, 0.88f), Vector2.zero, Vector2.zero);
+            StretchRect(resultsTitle.rectTransform, new Vector2(0.16f, 0.44f), new Vector2(0.84f, 0.53f), Vector2.zero, Vector2.zero);
+
+            resultsSubtitleText = EnsureText(
+                "ResultsSubtitleText",
+                resultsPanel.transform,
+                "BANKED THIS RUN",
+                24,
+                TextAnchor.MiddleCenter,
+                new Color(0.78f, 0.84f, 0.93f, 0.95f));
+            StretchRect(resultsSubtitleText.rectTransform, new Vector2(0.16f, 0.38f), new Vector2(0.84f, 0.45f), Vector2.zero, Vector2.zero);
 
             resultsDepthText = EnsureText(
                 "ResultsDepthText",
                 resultsPanel.transform,
                 "DEPTH REACHED 000",
-                46,
+                40,
                 TextAnchor.MiddleCenter,
                 Color.white);
-            StretchRect(resultsDepthText.rectTransform, new Vector2(0.1f, 0.52f), new Vector2(0.9f, 0.66f), Vector2.zero, Vector2.zero);
+            StretchRect(resultsDepthText.rectTransform, new Vector2(0.14f, 0.29f), new Vector2(0.86f, 0.38f), Vector2.zero, Vector2.zero);
 
             resultsCoinsText = EnsureText(
                 "ResultsCoinsText",
                 resultsPanel.transform,
                 "RUN COINS +0",
-                42,
+                38,
                 TextAnchor.MiddleCenter,
                 new Color(1f, 0.84f, 0.26f, 1f));
-            StretchRect(resultsCoinsText.rectTransform, new Vector2(0.1f, 0.38f), new Vector2(0.9f, 0.5f), Vector2.zero, Vector2.zero);
+            StretchRect(resultsCoinsText.rectTransform, new Vector2(0.14f, 0.21f), new Vector2(0.86f, 0.29f), Vector2.zero, Vector2.zero);
 
-            restartButton = EnsureButton("RestartButton", resultsPanel.transform, "RESTART");
-            StretchRect(restartButton.GetComponent<RectTransform>(), new Vector2(0.2f, 0.12f), new Vector2(0.8f, 0.28f), Vector2.zero, Vector2.zero);
+            resultsHintText = EnsureText(
+                "ResultsHintText",
+                resultsPanel.transform,
+                "HIT PLAY TO DROP BACK IN",
+                24,
+                TextAnchor.MiddleCenter,
+                new Color(0.84f, 0.9f, 0.98f, 0.88f));
+            StretchRect(resultsHintText.rectTransform, new Vector2(0.16f, 0.15f), new Vector2(0.84f, 0.21f), Vector2.zero, Vector2.zero);
+
+            upgradesButton = EnsureButton("UpgradesButton", resultsPanel.transform, "UPGRADES");
+            StretchRect(upgradesButton.GetComponent<RectTransform>(), new Vector2(0.16f, 0.13f), new Vector2(0.84f, 0.23f), Vector2.zero, Vector2.zero);
+            ConfigureButtonColors(
+                upgradesButton,
+                new Color(0.23f, 0.72f, 0.73f, 1f),
+                new Color(0.34f, 0.83f, 0.84f, 1f),
+                new Color(0.13f, 0.56f, 0.57f, 1f),
+                new Color(0.07f, 0.14f, 0.15f, 1f));
+            upgradesButton.onClick.RemoveAllListeners();
+            upgradesButton.onClick.AddListener(OnUpgradesPressed);
+
+            restartButton = EnsureButton("PlayButton", resultsPanel.transform, "PLAY");
+            StretchRect(restartButton.GetComponent<RectTransform>(), new Vector2(0.16f, 0.03f), new Vector2(0.84f, 0.12f), Vector2.zero, Vector2.zero);
             restartButton.onClick.RemoveAllListeners();
-            restartButton.onClick.AddListener(OnRestartPressed);
+            restartButton.onClick.AddListener(OnPrimaryActionPressed);
+            resultsRestartLabelText = restartButton.transform.Find("Label")?.GetComponent<Text>();
+            ConfigureButtonColors(
+                restartButton,
+                new Color(0.97f, 0.8f, 0.18f, 1f),
+                new Color(1f, 0.88f, 0.38f, 1f),
+                new Color(0.86f, 0.63f, 0.08f, 1f),
+                new Color(0.12f, 0.12f, 0.12f, 1f));
 
+            upgradePanel = FindOrCreate("UpgradePanel", resultsPanel.transform);
+            var upgradePanelImage = EnsureImageComponent(upgradePanel, new Color(0.09f, 0.11f, 0.15f, 0.98f));
+            StretchRect(upgradePanelImage.rectTransform, new Vector2(0.05f, 0.05f), new Vector2(0.95f, 0.95f), Vector2.zero, Vector2.zero);
+
+            var upgradeTitleText = EnsureText(
+                "UpgradeTitle",
+                upgradePanel.transform,
+                "UPGRADES",
+                62,
+                TextAnchor.MiddleCenter,
+                new Color(0.23f, 0.87f, 0.84f, 1f));
+            StretchRect(upgradeTitleText.rectTransform, new Vector2(0.1f, 0.68f), new Vector2(0.9f, 0.84f), Vector2.zero, Vector2.zero);
+
+            var upgradeComingSoonText = EnsureText(
+                "UpgradeComingSoonText",
+                upgradePanel.transform,
+                "COMING SOON",
+                44,
+                TextAnchor.MiddleCenter,
+                new Color(1f, 0.9f, 0.48f, 1f));
+            StretchRect(upgradeComingSoonText.rectTransform, new Vector2(0.14f, 0.44f), new Vector2(0.86f, 0.57f), Vector2.zero, Vector2.zero);
+
+            var upgradeBodyText = EnsureText(
+                "UpgradeBodyText",
+                upgradePanel.transform,
+                "SHOP WIRING LANDS NEXT.\nTHIS SCREEN IS A STUB.",
+                24,
+                TextAnchor.MiddleCenter,
+                new Color(0.84f, 0.9f, 0.98f, 0.9f));
+            StretchRect(upgradeBodyText.rectTransform, new Vector2(0.12f, 0.26f), new Vector2(0.88f, 0.42f), Vector2.zero, Vector2.zero);
+
+            upgradeBackButton = EnsureButton("UpgradeBackButton", upgradePanel.transform, "BACK");
+            StretchRect(upgradeBackButton.GetComponent<RectTransform>(), new Vector2(0.18f, 0.08f), new Vector2(0.82f, 0.2f), Vector2.zero, Vector2.zero);
+            ConfigureButtonColors(
+                upgradeBackButton,
+                new Color(0.23f, 0.72f, 0.73f, 1f),
+                new Color(0.34f, 0.83f, 0.84f, 1f),
+                new Color(0.13f, 0.56f, 0.57f, 1f),
+                new Color(0.07f, 0.14f, 0.15f, 1f));
+            upgradeBackButton.onClick.RemoveAllListeners();
+            upgradeBackButton.onClick.AddListener(OnUpgradeBackPressed);
+
+            upgradePanel.SetActive(false);
             resultsOverlay.SetActive(false);
         }
 
         private void EnsureEventSystem()
         {
-            if (FindFirstObjectByType<EventSystem>() != null)
+            if (FindAnyObjectByType<EventSystem>() != null)
             {
                 return;
             }
@@ -392,6 +554,7 @@ namespace TapMiner.Core
                 ? 0f
                 : Mathf.Clamp01((completedSegments + 1f) / Mathf.Max(1f, bootstrap.CurrentSpawnedSegmentCount));
             var pulse = (Mathf.Sin(Time.time * 5f) + 1f) * 0.5f;
+            var lanePunch = laneShiftImpulse * 0.18f;
 
             for (var laneIndex = 0; laneIndex < laneRenderers.Length; laneIndex += 1)
             {
@@ -426,8 +589,8 @@ namespace TapMiner.Core
                 SetRendererColor(laneRenderers[laneIndex], laneColor);
                 SetRendererColor(laneGlowRenderers[laneIndex], laneGlowColor);
                 laneGlowRenderers[laneIndex].transform.localScale = new Vector3(
-                    1.25f + (laneIndex == bootstrap.CurrentCommittedLaneIndex ? 0.06f : 0f),
-                    1.05f + (pulse * 0.03f),
+                    1.25f + (laneIndex == bootstrap.CurrentCommittedLaneIndex ? 0.06f + lanePunch : 0f),
+                    1.05f + (pulse * 0.03f) + (laneIndex == bootstrap.CurrentCommittedLaneIndex ? lanePunch * 0.6f : 0f),
                     1f);
 
                 var markerColor = MarkerNeutralColor;
@@ -444,8 +607,8 @@ namespace TapMiner.Core
 
                 SetRendererColor(markerRenderers[laneIndex], markerColor);
                 markerRenderers[laneIndex].transform.localScale = new Vector3(
-                    laneIndex == bootstrap.CurrentCommittedLaneIndex ? 1.12f : 1.02f,
-                    1.18f + Mathf.Sin(Time.time * 2.2f + laneIndex) * 0.1f,
+                    laneIndex == bootstrap.CurrentCommittedLaneIndex ? 1.12f + lanePunch : 1.02f,
+                    1.18f + Mathf.Sin(Time.time * 2.2f + laneIndex) * 0.1f + (segment != null && segment.BreakableLaneMask[laneIndex] ? breakImpulse * 0.16f : 0f) + (segment != null && segment.HazardLaneMask[laneIndex] ? hitImpulse * 0.12f : 0f),
                     0.65f);
 
                 var hasReward = segment != null && segment.HasRewardPath && laneIndex == segment.RewardLaneIndex;
@@ -453,7 +616,7 @@ namespace TapMiner.Core
                 if (hasReward)
                 {
                     SetRendererColor(rewardRenderers[laneIndex], new Color(1f, 0.82f, 0.22f, 1f));
-                    rewardRenderers[laneIndex].transform.localScale = Vector3.one * (0.52f + (pulse * 0.07f));
+                    rewardRenderers[laneIndex].transform.localScale = Vector3.one * (0.52f + (pulse * 0.07f) + (lootImpulse * 0.16f));
                 }
             }
 
@@ -465,12 +628,20 @@ namespace TapMiner.Core
 
             playerVisualRoot.localPosition = new Vector3(
                 (bootstrap.CurrentCommittedLaneIndex - 1) * LaneSpacing,
-                -1.95f + Mathf.Sin(Time.time * 6.2f) * 0.03f,
+                -1.95f + Mathf.Sin(Time.time * 6.2f) * 0.03f + (breakImpulse * 0.05f) - (hitImpulse * 0.08f),
                 -0.3f);
+            playerVisualRoot.localScale = new Vector3(
+                1f + (laneShiftImpulse * 0.06f) + (breakImpulse * 0.08f),
+                1f - (laneShiftImpulse * 0.05f) - (hitImpulse * 0.06f),
+                1f);
 
             if (playerShadowRenderer != null)
             {
                 SetRendererColor(playerShadowRenderer, new Color(0f, 0f, 0f, 0.35f));
+                playerShadowRenderer.transform.localScale = new Vector3(
+                    0.9f + (laneShiftImpulse * 0.18f) + (breakImpulse * 0.14f),
+                    0.34f + (laneShiftImpulse * 0.04f),
+                    1f);
             }
 
             if (playerBodyRenderer != null)
@@ -493,11 +664,15 @@ namespace TapMiner.Core
                     new Color(1f, 0.92f, 0.66f, 1f),
                     new Color(1f, 0.98f, 0.84f, 1f),
                     pulse));
+                playerLampRenderer.transform.localScale = new Vector3(
+                    0.22f + (lootImpulse * 0.12f) + (hitImpulse * 0.08f),
+                    0.14f + (lootImpulse * 0.06f),
+                    0.08f);
             }
 
             if (collapseRenderers != null && collapseRenderers.Length == 2)
             {
-                collapseRoot.localPosition = new Vector3(0f, -collapseProgress * 1.1f, 0f);
+                collapseRoot.localPosition = new Vector3(0f, -collapseProgress * 1.1f - (collapseSurgeImpulse * 0.08f), 0f);
                 SetRendererColor(collapseRenderers[0], Color.Lerp(
                     new Color(0.42f, 0.3f, 0.12f, 1f),
                     new Color(0.88f, 0.25f, 0.22f, 1f),
@@ -508,8 +683,20 @@ namespace TapMiner.Core
                     collapseProgress));
                 collapseRenderers[1].transform.localScale = new Vector3(
                     8.2f,
-                    0.2f + (collapseProgress * 0.12f) + (pulse * 0.03f),
+                    0.2f + (collapseProgress * 0.12f) + (pulse * 0.03f) + (collapseSurgeImpulse * 0.12f),
                     0.15f);
+            }
+
+            if (mainCamera != null)
+            {
+                var cameraOffset = new Vector3(
+                    (bootstrap.CurrentCommittedLaneIndex - 1) * 0.04f + (laneShiftImpulse * 0.07f),
+                    (breakImpulse * 0.05f) - (hitImpulse * 0.09f) + (collapseSurgeImpulse * 0.04f),
+                    0f);
+                mainCamera.transform.position = Vector3.Lerp(
+                    mainCamera.transform.position,
+                    baseCameraPosition + cameraOffset,
+                    14f * Time.deltaTime);
             }
         }
 
@@ -517,6 +704,7 @@ namespace TapMiner.Core
         {
             var depthValue = bootstrap.CurrentCompletedSegmentCount * 5;
             var state = bootstrap.CurrentRunState;
+            var isMenuVisible = state == RunState.RunReady || state == RunState.RunDeathResolved;
 
             if (state != RunState.RunDeathResolved)
             {
@@ -527,27 +715,36 @@ namespace TapMiner.Core
             depthText.text = $"DEPTH {depthValue:000}";
             coinText.text = $"COINS {bootstrap.SoftCurrencyBalance:000}";
             depthText.color = Color.Lerp(new Color(0.92f, 0.95f, 1f, 1f), new Color(1f, 0.93f, 0.7f, 1f), Mathf.Clamp01(depthValue / 60f));
+            depthText.gameObject.SetActive(!isMenuVisible);
+            coinText.gameObject.SetActive(!isMenuVisible);
 
             var collapseProgress = Mathf.Clamp01((bootstrap.CurrentCompletedSegmentCount + 1f) / Mathf.Max(1f, bootstrap.CurrentSpawnedSegmentCount));
+            collapseFrameImage.gameObject.SetActive(!isMenuVisible);
             collapseFillImage.fillAmount = 0.08f + (collapseProgress * 0.92f);
             collapseFillImage.color = Color.Lerp(
                 new Color(0.21f, 0.78f, 0.45f, 1f),
                 new Color(0.95f, 0.29f, 0.23f, 1f),
                 collapseProgress);
+            collapseFillImage.rectTransform.localScale = Vector3.Lerp(
+                collapseFillImage.rectTransform.localScale,
+                new Vector3(1f + (collapseSurgeImpulse * 0.06f), 1f + (collapseSurgeImpulse * 0.1f), 1f),
+                12f * Time.deltaTime);
             if (collapseFrameImage != null)
             {
                 collapseFrameImage.color = Color.Lerp(
                     new Color(0.12f, 0.13f, 0.18f, 0.94f),
                     new Color(0.28f, 0.08f, 0.08f, 0.98f),
                     collapseProgress * 0.85f);
+                collapseFrameImage.rectTransform.localScale = Vector3.Lerp(
+                    collapseFrameImage.rectTransform.localScale,
+                    new Vector3(1f + (collapseSurgeImpulse * 0.03f), 1f + (collapseSurgeImpulse * 0.05f), 1f),
+                    12f * Time.deltaTime);
             }
 
             switch (state)
             {
                 case RunState.RunReady:
-                    promptText.gameObject.SetActive(true);
-                    promptText.text = "TAP TO START";
-                    promptText.color = new Color(0.82f, 0.91f, 1f, 0.84f);
+                    promptText.gameObject.SetActive(false);
                     break;
                 case RunState.RunActive:
                     promptText.gameObject.SetActive(true);
@@ -563,11 +760,19 @@ namespace TapMiner.Core
             }
 
             UpdateFeedbackReadability();
+            UpdateHudPunch();
+
+            feedbackText.gameObject.SetActive(!isMenuVisible);
 
             if (feedbackText != null && state == RunState.RunReady && !bootstrap.IsFeedbackActive)
             {
                 feedbackText.text = "READY";
                 feedbackText.color = new Color(0.9f, 0.95f, 1f, 1f);
+            }
+
+            if (hitFlashImage != null)
+            {
+                hitFlashImage.color = new Color(1f, 0.22f, 0.18f, hitFlashAlpha);
             }
         }
 
@@ -627,9 +832,43 @@ namespace TapMiner.Core
             feedbackText.color = Color.Lerp(feedbackText.color, targetColor, 12f * Time.deltaTime);
         }
 
+        private void UpdateHudPunch()
+        {
+            depthText.rectTransform.localScale = Vector3.Lerp(
+                depthText.rectTransform.localScale,
+                Vector3.one * (1f + (breakImpulse * 0.02f)),
+                12f * Time.deltaTime);
+
+            coinText.rectTransform.localScale = Vector3.Lerp(
+                coinText.rectTransform.localScale,
+                Vector3.one * (1f + (lootImpulse * 0.18f)),
+                12f * Time.deltaTime);
+
+            promptText.rectTransform.localScale = Vector3.Lerp(
+                promptText.rectTransform.localScale,
+                Vector3.one * (1f + (collapseSurgeImpulse * 0.03f)),
+                10f * Time.deltaTime);
+        }
+
         private void UpdateResultsPresentation()
         {
-            var isVisible = debugPreviewResultsOverlay || bootstrap.CurrentRunState == RunState.RunDeathResolved;
+            var state = bootstrap.CurrentRunState;
+            var isVisible = debugPreviewResultsOverlay || state == RunState.RunReady || state == RunState.RunDeathResolved;
+            var showLastRunResults = debugPreviewResultsOverlay || state == RunState.RunDeathResolved;
+            if (state == RunState.RunActive)
+            {
+                isUpgradePanelOpen = false;
+            }
+
+            if (showLastRunResults && lastVisibleDepth > bestVisibleDepth)
+            {
+                bestVisibleDepth = lastVisibleDepth;
+                PlayerPrefs.SetInt(BestDepthPlayerPrefsKey, bestVisibleDepth);
+                PlayerPrefs.Save();
+            }
+
+            resultsTransition = Mathf.MoveTowards(resultsTransition, isVisible ? 1f : 0f, Time.deltaTime * 5f);
+
             if (resultsOverlay.activeSelf != isVisible)
             {
                 resultsOverlay.SetActive(isVisible);
@@ -637,11 +876,126 @@ namespace TapMiner.Core
 
             if (!isVisible)
             {
+                if (resultsOverlayImage != null)
+                {
+                    resultsOverlayImage.color = new Color(0.04f, 0.05f, 0.08f, 0f);
+                }
+
                 return;
             }
 
+            var pulse = (Mathf.Sin(Time.time * 4.2f) + 1f) * 0.5f;
+            menuBestDepthText.text = $"BEST: {bestVisibleDepth:000}";
             resultsDepthText.text = $"DEPTH REACHED {lastVisibleDepth:000}";
             resultsCoinsText.text = $"RUN COINS +{lastVisibleRunCoins}";
+            resultsSubtitleText.text = lastVisibleRunCoins > 0 ? "BANKED THIS RUN" : "NO BANKED LOOT";
+            resultsHintText.text = showLastRunResults ? "HIT PLAY TO DROP BACK IN" : "TAP PLAY TO START";
+            var shouldShowUpgradePanel = isUpgradePanelOpen;
+            resultsSubtitleText.gameObject.SetActive(showLastRunResults && !shouldShowUpgradePanel);
+            resultsDepthText.gameObject.SetActive(showLastRunResults && !shouldShowUpgradePanel);
+            resultsCoinsText.gameObject.SetActive(showLastRunResults && !shouldShowUpgradePanel);
+            resultsHintText.gameObject.SetActive(showLastRunResults && !shouldShowUpgradePanel);
+            upgradesButton.gameObject.SetActive(!shouldShowUpgradePanel);
+            restartButton.gameObject.SetActive(!shouldShowUpgradePanel);
+            upgradePanel.SetActive(shouldShowUpgradePanel);
+
+            if (resultsOverlayImage != null)
+            {
+                resultsOverlayImage.color = new Color(0.03f, 0.04f, 0.07f, 0.82f * resultsTransition);
+            }
+
+            if (resultsPanelImage != null)
+            {
+                resultsPanelImage.color = Color.Lerp(
+                    new Color(0.1f, 0.11f, 0.16f, 0.96f),
+                    new Color(0.16f, 0.12f, 0.08f, 0.98f),
+                    0.18f + (pulse * 0.08f));
+                resultsPanelImage.rectTransform.localScale = Vector3.Lerp(
+                    resultsPanelImage.rectTransform.localScale,
+                    Vector3.one * (0.96f + (resultsTransition * 0.04f)),
+                    14f * Time.deltaTime);
+            }
+
+            resultsDepthText.color = Color.Lerp(
+                new Color(0.92f, 0.95f, 1f, 1f),
+                new Color(1f, 0.95f, 0.78f, 1f),
+                Mathf.Clamp01(lastVisibleDepth / 60f));
+            resultsCoinsText.color = lastVisibleRunCoins > 0
+                ? new Color(1f, 0.85f, 0.26f, 1f)
+                : new Color(0.74f, 0.78f, 0.86f, 1f);
+
+            if (resultsRestartLabelText != null)
+            {
+                resultsRestartLabelText.text = "PLAY";
+                resultsRestartLabelText.color = new Color(0.12f, 0.12f, 0.12f, 1f);
+            }
+
+            var restartImage = restartButton.GetComponent<Image>();
+            if (restartImage != null)
+            {
+                restartImage.color = Color.Lerp(
+                    new Color(0.96f, 0.74f, 0.14f, 1f),
+                    new Color(1f, 0.88f, 0.28f, 1f),
+                    pulse);
+            }
+
+            restartButton.transform.localScale = Vector3.Lerp(
+                restartButton.transform.localScale,
+                Vector3.one * (1f + (pulse * 0.035f)),
+                10f * Time.deltaTime);
+
+            if (menuTitleText != null)
+            {
+                menuTitleText.color = Color.Lerp(
+                    new Color(1f, 0.88f, 0.42f, 1f),
+                    new Color(1f, 0.95f, 0.66f, 1f),
+                    pulse * 0.45f);
+            }
+        }
+
+        private void DetectPresentationEvents()
+        {
+            if (bootstrap.CurrentCommittedLaneIndex != lastCommittedLaneIndex)
+            {
+                laneShiftImpulse = 1f;
+                lastCommittedLaneIndex = bootstrap.CurrentCommittedLaneIndex;
+            }
+
+            if (bootstrap.CurrentRunRewardResult.TotalRewardValue > lastRunRewardValue)
+            {
+                var rewardGain = bootstrap.CurrentRunRewardResult.TotalRewardValue - lastRunRewardValue;
+                breakImpulse = Mathf.Max(breakImpulse, 0.8f);
+                lootImpulse = Mathf.Max(lootImpulse, Mathf.Clamp01(0.55f + (rewardGain * 0.05f)));
+                lastRunRewardValue = bootstrap.CurrentRunRewardResult.TotalRewardValue;
+            }
+            else if (bootstrap.CurrentRunRewardResult.TotalRewardValue < lastRunRewardValue)
+            {
+                lastRunRewardValue = bootstrap.CurrentRunRewardResult.TotalRewardValue;
+            }
+
+            if (bootstrap.CurrentRunHealth < lastRunHealth)
+            {
+                hitImpulse = 1f;
+                hitFlashAlpha = 0.38f;
+            }
+
+            lastRunHealth = bootstrap.CurrentRunHealth;
+
+            var collapseProgress = Mathf.Clamp01((bootstrap.CurrentCompletedSegmentCount + 1f) / Mathf.Max(1f, bootstrap.CurrentSpawnedSegmentCount));
+            if (collapseProgress > 0.55f)
+            {
+                collapseSurgeImpulse = Mathf.Max(collapseSurgeImpulse, (collapseProgress - 0.55f) / 0.45f);
+            }
+        }
+
+        private void TickPresentationImpulses()
+        {
+            laneShiftImpulse = Mathf.MoveTowards(laneShiftImpulse, 0f, Time.deltaTime * 6f);
+            breakImpulse = Mathf.MoveTowards(breakImpulse, 0f, Time.deltaTime * 4.5f);
+            lootImpulse = Mathf.MoveTowards(lootImpulse, 0f, Time.deltaTime * 3.5f);
+            hitImpulse = Mathf.MoveTowards(hitImpulse, 0f, Time.deltaTime * 5.5f);
+            collapseSurgeImpulse = Mathf.MoveTowards(collapseSurgeImpulse, 0f, Time.deltaTime * 1.7f);
+            hitFlashAlpha = Mathf.MoveTowards(hitFlashAlpha, 0f, Time.deltaTime * 2.8f);
         }
 
         private static GameObject FindOrCreate(string objectName, Transform parent)
@@ -805,9 +1159,36 @@ namespace TapMiner.Core
             colors.selectedColor = colors.highlightedColor;
             button.colors = colors;
 
-            var labelText = EnsureText("Label", buttonObject.transform, label, 42, TextAnchor.MiddleCenter, new Color(0.12f, 0.12f, 0.12f, 1f));
+            var labelText = EnsureText("Label", buttonObject.transform, label, 44, TextAnchor.MiddleCenter, new Color(0.12f, 0.12f, 0.12f, 1f));
             StretchRect(labelText.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             return button;
+        }
+
+        private static void ConfigureButtonColors(Button button, Color normalColor, Color highlightedColor, Color pressedColor, Color labelColor)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            var image = button.GetComponent<Image>();
+            if (image != null)
+            {
+                image.color = normalColor;
+            }
+
+            var colors = button.colors;
+            colors.normalColor = normalColor;
+            colors.highlightedColor = highlightedColor;
+            colors.pressedColor = pressedColor;
+            colors.selectedColor = highlightedColor;
+            button.colors = colors;
+
+            var label = button.transform.Find("Label")?.GetComponent<Text>();
+            if (label != null)
+            {
+                label.color = labelColor;
+            }
         }
 
         private static void StretchRect(RectTransform rectTransform, Vector2 anchorMin, Vector2 anchorMax, Vector2 offsetMin, Vector2 offsetMax)
