@@ -25,6 +25,9 @@ namespace TapMiner.Core
         [SerializeField]
         private bool debugPreviewResultsOverlay;
 
+        [SerializeField]
+        private Material _urpLitBaseMaterial;
+
         private AppBootstrap bootstrap;
         private Camera mainCamera;
 
@@ -1011,7 +1014,7 @@ namespace TapMiner.Core
             return created;
         }
 
-        private static GameObject CreatePrimitive(string objectName, PrimitiveType primitiveType, Transform parent)
+        private GameObject CreatePrimitive(string objectName, PrimitiveType primitiveType, Transform parent)
         {
             var existing = parent.Find(objectName);
             if (existing != null)
@@ -1020,6 +1023,16 @@ namespace TapMiner.Core
             }
 
             var created = GameObject.CreatePrimitive(primitiveType);
+            var col = created.GetComponent<Collider>();
+            if (col != null)
+            {
+                Object.DestroyImmediate(col);
+            }
+            var renderer = created.GetComponent<Renderer>();
+            if (renderer != null && _urpLitBaseMaterial != null)
+            {
+                renderer.material = new Material(_urpLitBaseMaterial);
+            }
             created.name = objectName;
             created.transform.SetParent(parent, false);
             return created;

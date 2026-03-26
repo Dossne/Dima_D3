@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace TapMiner.Core
@@ -325,7 +326,10 @@ namespace TapMiner.Core
 
             if (swipeInputInterpreter.TryConsumeTap())
             {
-                HandleTapInteraction();
+                if (!IsPointerOverUi())
+                {
+                    HandleTapInteraction();
+                }
             }
 
             if (swipeInputInterpreter.TryConsumeSwipeDirection(out var direction))
@@ -336,6 +340,22 @@ namespace TapMiner.Core
             TickFeedback(Time.deltaTime);
             ProcessDebugCommands();
             SyncDebugState();
+        }
+
+        private static bool IsPointerOverUi()
+        {
+            var eventSystem = EventSystem.current;
+            if (eventSystem == null)
+            {
+                return false;
+            }
+
+            if (Input.touchCount > 0)
+            {
+                return eventSystem.IsPointerOverGameObject(Input.GetTouch(0).fingerId);
+            }
+
+            return eventSystem.IsPointerOverGameObject();
         }
 
         private void OnDestroy()
