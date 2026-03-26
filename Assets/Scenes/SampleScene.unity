@@ -589,6 +589,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TapMiner.Core.RunPresentationController
   debugPreviewResultsOverlay: 0
   _urpLitBaseMaterial: {fileID: 2100000, guid: 606efc17f204a1d43968cf61f177bb09, type: 2}
+  scrollConfig: {fileID: 0}
+  pauseConfig: {fileID: 0}
 --- !u!1 &832575517
 GameObject:
   m_ObjectHideFlags: 0

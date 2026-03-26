@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -238,14 +239,20 @@ namespace TapMiner.Core
         private Vector3 defaultFeedbackScale = Vector3.one;
         private float feedbackTimerSeconds;
         private PlaytestDeathCause pendingPlaytestDeathCause;
+        private bool _isPaused;
+        private bool pendingStartAfterRestart;
+        private RunPresentationController runPresentationController;
 
         public RunState CurrentRunState => runStateMachine.CurrentState;
         public int CurrentRunContextId => runStateMachine.CurrentRunContextId;
         public bool IsMovementProcessingEnabled => runStateMachine.IsMovementProcessingEnabled;
         public bool IsDamageProcessingEnabled => runStateMachine.IsDamageProcessingEnabled;
         public bool HasActiveRunAuthority => runStateMachine.HasActiveRunAuthority;
-        public int CurrentCommittedLaneIndex => laneTransitionController.CommittedLaneIndex;
-        public bool IsLaneTransitioning => laneTransitionController.IsTransitioning;
+        public bool IsPaused => _isPaused;
+        public int CurrentCommittedLaneIndex => laneTransitionController != null
+            ? laneTransitionController.CommittedLaneIndex
+            : initialLaneIndex;
+        public bool IsLaneTransitioning => laneTransitionController != null && laneTransitionController.IsTransitioning;
         public int CurrentSpawnedSegmentCount => segmentSpawnSystem.SpawnedSegments.Count;
         public int CurrentUniqueSegmentVariationCount => segmentSpawnSystem.GetUniqueVariationCount();
         public int CurrentEnemyHazardVariantCount => segmentSpawnSystem.GetEnemyHazardVariantCount();
@@ -293,7 +300,7 @@ namespace TapMiner.Core
             runHealthSystem = new RunHealthSystem();
             missionLayerLiteSystem = new MissionLayerLiteSystem();
             playtestInstrumentationSystem = new PlaytestInstrumentationSystem();
-            var runPresentationController = GetComponent<RunPresentationController>();
+            runPresentationController = GetComponent<RunPresentationController>();
             var laneHostTransform = runPresentationController != null
                 ? runPresentationController.GetPlayerTransform()
                 : transform;
@@ -331,21 +338,24 @@ namespace TapMiner.Core
                 return;
             }
 
-            swipeInputInterpreter.PollFrame();
-            laneTransitionController.Tick(Time.deltaTime);
-
-            if (swipeInputInterpreter.TryConsumeTap())
+            if (!_isPaused)
             {
-                if (!IsPointerOverUi())
+                swipeInputInterpreter.PollFrame();
+                laneTransitionController.Tick(Time.deltaTime);
+
+                if (swipeInputInterpreter.TryConsumeTap())
                 {
-                    HandleTapInteraction();
+                    if (!IsPointerOverUi())
+                    {
+                        HandleTapInteraction();
+                    }
                 }
-            }
 
-            if (swipeInputInterpreter.TryConsumeSwipeDirection(out var direction))
-            {
-                Debug.Log($"[INPUT] Swipe consumed: {direction} | overUI={IsPointerOverUi()}"); // TM-BUILD-15-TEMP
-                HandleMovementSwipe(direction);
+                if (swipeInputInterpreter.TryConsumeSwipeDirection(out var direction))
+                {
+                    Debug.Log($"[INPUT] Swipe consumed: {direction} | overUI={IsPointerOverUi()}"); // TM-BUILD-15-TEMP
+                    HandleMovementSwipe(direction);
+                }
             }
 
             TickFeedback(Time.deltaTime);
@@ -396,8 +406,25 @@ namespace TapMiner.Core
             return result;
         }
 
+        public bool RequestMenuPlay()
+        {
+            if (CurrentRunState == RunState.RunReady)
+            {
+                return RequestStartRun();
+            }
+
+            if (CurrentRunState == RunState.RunDeathResolved)
+            {
+                pendingStartAfterRestart = true;
+                return RequestRestartRun();
+            }
+
+            return false;
+        }
+
         public bool RequestRestartRun()
         {
+            SetPaused(false);
             var completedRunContextId = CurrentRunContextId;
             var result = TryCommand("RestartRun", runStateMachine.TryRestartRun);
             if (result)
@@ -406,6 +433,18 @@ namespace TapMiner.Core
             }
 
             return result;
+        }
+
+        public bool RequestTogglePause()
+        {
+            if (CurrentRunState != RunState.RunActive)
+            {
+                SetPaused(false);
+                return false;
+            }
+
+            SetPaused(!_isPaused);
+            return true;
         }
 
         public bool NotifyLethalDamage()
@@ -617,7 +656,6 @@ namespace TapMiner.Core
             switch (CurrentRunState)
             {
                 case RunState.RunReady:
-                    RequestStartRun();
                     break;
                 case RunState.RunActive:
                     RequestProcessCurrentSegment();
@@ -814,7 +852,6 @@ namespace TapMiner.Core
             if (debugRequestStartRun)
             {
                 debugRequestStartRun = false;
-                RequestStartRun();
             }
 
             if (debugRequestRestartRun)
@@ -856,6 +893,17 @@ namespace TapMiner.Core
 
         private void HandleStateChanged(RunState previousState, RunState newState)
         {
+            if (newState == RunState.RunDeathResolved || newState == RunState.RunRestarting || newState == RunState.RunReady)
+            {
+                SetPaused(false);
+            }
+
+            if (newState == RunState.RunReady && pendingStartAfterRestart)
+            {
+                pendingStartAfterRestart = false;
+                RequestStartRun();
+            }
+
             if (previousState == RunState.RunActive && newState == RunState.RunDeathResolved)
             {
                 playtestInstrumentationSystem.RecordDeath(
@@ -882,6 +930,7 @@ namespace TapMiner.Core
                 debugActiveSegmentIndex = 0;
                 debugCompletedSegmentCount = 0;
                 debugLastCompletedSegmentIndex = -1;
+                StartCoroutine(CompleteRestartNextFrame());
             }
             else if (newState != RunState.RunActive)
             {
@@ -903,6 +952,28 @@ namespace TapMiner.Core
 
             SyncDebugState();
             Debug.Log($"[AppBootstrap] Run state changed {previousState} -> {newState} (context {CurrentRunContextId}).");
+        }
+
+        private void SetPaused(bool isPaused)
+        {
+            _isPaused = isPaused;
+            if (runPresentationController != null)
+            {
+                runPresentationController.SetPauseOverlayVisible(_isPaused);
+            }
+        }
+
+        private IEnumerator CompleteRestartNextFrame()
+        {
+            yield return null;
+
+            if (runStateMachine == null || CurrentRunState != RunState.RunRestarting)
+            {
+                yield break;
+            }
+
+            var result = runStateMachine.TryCompleteRestart();
+            Debug.Log("[STATE] TryCompleteRestart result: " + result);
         }
 
         private void SyncDebugState()

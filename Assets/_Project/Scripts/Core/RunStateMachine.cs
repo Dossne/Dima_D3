@@ -41,13 +41,12 @@ namespace TapMiner.Core
 
         public bool TryRestartRun()
         {
-            if (!TryTransition(RunState.RunRestarting, "One-tap restart accepted."))
-            {
-                return false;
-            }
+            return TryTransition(RunState.RunRestarting, "One-tap restart accepted.");
+        }
 
-            // T001 repair locked restart into a one-tap flow that returns directly to RunActive.
-            return TryTransition(RunState.RunActive, "Fresh run initialization complete.");
+        public bool TryCompleteRestart()
+        {
+            return TryTransition(RunState.RunReady, "Restart complete, waiting for player.");
         }
 
         public bool CanAcceptGameplayInput()
@@ -91,7 +90,7 @@ namespace TapMiner.Core
                 RunState.RunReady => targetState == RunState.RunActive,
                 RunState.RunActive => targetState == RunState.RunDeathResolved,
                 RunState.RunDeathResolved => targetState == RunState.RunRestarting,
-                RunState.RunRestarting => targetState == RunState.RunActive,
+                RunState.RunRestarting => targetState == RunState.RunReady,
                 _ => false
             };
         }

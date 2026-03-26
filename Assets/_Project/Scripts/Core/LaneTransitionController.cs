@@ -15,6 +15,10 @@ namespace TapMiner.Core
         private float transitionElapsedSeconds;
         private float transitionDurationMultiplier = 1f;
         private int targetLaneIndex;
+        private int bufferedDirection;
+        private float bufferTimestamp = -1f;
+
+        private const float BufferWindowSeconds = 0.08f;
 
         public int CurrentLaneIndex { get; private set; }
         public int CommittedLaneIndex => IsTransitioning ? SourceLaneIndex : CurrentLaneIndex;
@@ -46,6 +50,8 @@ namespace TapMiner.Core
         {
             IsTransitioning = false;
             transitionElapsedSeconds = 0f;
+            bufferedDirection = 0;
+            bufferTimestamp = -1f;
             CurrentLaneIndex = initialLaneIndex;
             SourceLaneIndex = initialLaneIndex;
             targetLaneIndex = initialLaneIndex;
@@ -58,6 +64,12 @@ namespace TapMiner.Core
         {
             if (IsTransitioning)
             {
+                if (bufferedDirection == 0)
+                {
+                    bufferedDirection = direction;
+                    bufferTimestamp = Time.time;
+                }
+
                 Debug.Log($"[LANE] TryStartTransition({direction}) -> result=False"); // TM-BUILD-15-TEMP
                 return false;
             }
@@ -108,6 +120,19 @@ namespace TapMiner.Core
             hostTransform.localPosition = new Vector3(target.x, cur.y, cur.z);
             IsTransitioning = false;
             transitionElapsedSeconds = 0f;
+
+            if (bufferedDirection != 0)
+            {
+                var bufferStillValid = (Time.time - bufferTimestamp) <= BufferWindowSeconds;
+                var direction = bufferedDirection;
+                bufferedDirection = 0;
+                bufferTimestamp = -1f;
+
+                if (bufferStillValid)
+                {
+                    TryStartTransition(direction);
+                }
+            }
         }
 
         public void CancelActiveTransition()
