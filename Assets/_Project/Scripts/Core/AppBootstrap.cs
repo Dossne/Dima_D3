@@ -257,6 +257,7 @@ namespace TapMiner.Core
         public RunRewardResult CurrentRunRewardResult => runRewardAggregationSystem.CurrentRewardResult;
         public HazardContactResult LastHazardContactResult => hazardContactResolutionSystem.LastHazardContactResult;
         public int SoftCurrencyBalance => upgradePersistenceSystem.SoftCurrencyBalance;
+        public int CurrentCompletedSegmentCount => debugCompletedSegmentCount;
         public int CurrentRunHealth => runHealthSystem.CurrentHealth;
         public int CurrentRunMaxHealth => runHealthSystem.MaxHealth;
         public UpgradeStatsSnapshot CurrentUpgradeStats => upgradePersistenceSystem.CurrentStats;
@@ -266,6 +267,16 @@ namespace TapMiner.Core
         public string CurrentFeedbackText => feedbackText != null ? feedbackText.text : string.Empty;
         public bool IsFeedbackActive => feedbackTimerSeconds > 0f;
         public string CurrentPlaytestSessionId => playtestInstrumentationSystem.SessionId;
+
+        public SegmentDescriptor GetCurrentSegmentDescriptor()
+        {
+            if (!HasValidActiveSegment())
+            {
+                return null;
+            }
+
+            return segmentSpawnSystem.SpawnedSegments[debugActiveSegmentIndex];
+        }
 
         private void Awake()
         {

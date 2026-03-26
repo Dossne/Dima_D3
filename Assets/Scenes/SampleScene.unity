@@ -472,6 +472,7 @@ GameObject:
   m_Component:
   - component: {fileID: 553531133}
   - component: {fileID: 553531132}
+  - component: {fileID: 553531134}
   m_Layer: 0
   m_Name: BootstrapInstaller
   m_TagString: Untagged
@@ -492,6 +493,73 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TapMiner.Core.AppBootstrap
   bootstrapVersion: 0.1.0
+  laneLocalPositions:
+  - {x: -2, y: 0, z: 0}
+  - {x: 0, y: 0, z: 0}
+  - {x: 2, y: 0, z: 0}
+  initialLaneIndex: 1
+  laneTransitionDurationSeconds: 0.12
+  minimumSwipeDistancePixels: 48
+  debugCommittedLaneIndex: 0
+  debugTargetLaneIndex: 0
+  debugIsLaneTransitioning: 0
+  debugRequestStartRun: 0
+  debugRequestRestartRun: 0
+  debugRequestProcessCurrentSegment: 0
+  debugRequestBreakCurrentLaneTarget: 0
+  debugRequestResolveCurrentLaneHazardContact: 0
+  debugRequestLaneLeft: 0
+  debugRequestLaneRight: 0
+  initialSegmentBatchCount: 12
+  debugSpawnedSegmentCount: 0
+  debugFirstSegmentType: 0
+  debugFirstSegmentDepthBucket: 0
+  debugFirstSegmentSafeLaneIndex: 0
+  debugFirstSegmentVariationId: 0
+  debugUniqueSegmentVariationCount: 0
+  debugEnemyHazardVariantCount: 0
+  debugActiveSegmentIndex: 0
+  debugCurrentSegmentBreakableTargetCount: 0
+  debugLastBreakResolutionResult: 0
+  debugSuccessfulBreakCount: 0
+  debugLastLootResolutionResult: 0
+  debugSuccessfulLootDropCount: 0
+  debugTotalGrantedLootValue: 0
+  debugLastGrantedLootValue: 0
+  debugCurrentRunRewardValue: 0
+  debugCurrentRunRewardCount: 0
+  debugLastRewardSegmentIndex: -1
+  debugLastRewardLaneIndex: -1
+  debugLastHazardContactResult: 0
+  debugCurrentSegmentHazardTargetCount: 0
+  debugSuccessfulHazardContactCount: 0
+  debugSoftCurrencyBalance: 0
+  debugDrillPowerLevel: 0
+  debugMaxHpLevel: 0
+  debugMoveSpeedLevel: 0
+  debugLootValueLevel: 0
+  debugCollapseResistanceLevel: 0
+  debugAppliedBreakSpeedMultiplier: 1
+  debugAppliedMaxHealth: 1
+  debugCurrentHealth: 1
+  debugAppliedLaneTransitionDurationSeconds: 0
+  debugAppliedLootValueMultiplier: 1
+  debugAppliedCollapseCatchRateMultiplier: 1
+  debugBreakMission: 
+  debugSegmentMission: 
+  debugEarnSoftMission: 
+  debugLastCompletedMissionTemplate: 0
+  debugLastGrantedMissionReward: 0
+  debugTotalMissionRewardsGranted: 0
+  debugCompletedSegmentCount: 0
+  debugLastCompletedSegmentIndex: -1
+  debugCurrentFeedbackText: 
+  debugCurrentFeedbackColor: {r: 1, g: 1, b: 1, a: 1}
+  debugFeedbackActive: 0
+  laneTransitionFeedbackClip: {fileID: 0}
+  breakFeedbackClip: {fileID: 0}
+  lootFeedbackClip: {fileID: 0}
+  hazardFeedbackClip: {fileID: 0}
 --- !u!4 &553531133
 Transform:
   m_ObjectHideFlags: 0
@@ -507,6 +575,19 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &553531134
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 553531131}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 078798c61d56c834c8d4b11850573d5d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TapMiner.Core.RunPresentationController
+  debugPreviewResultsOverlay: 0
 --- !u!1 &832575517
 GameObject:
   m_ObjectHideFlags: 0
