@@ -7,38 +7,52 @@ Tap Miner is a Unity 6 mobile prototype built in URP. The project is being devel
 - Main scene: `Assets/Scenes/SampleScene.unity`
 - Primary target: Android portrait devices (current testing focus: Pixel 9)
 - Rendering: URP with mobile renderer path enabled
-- Input: swipe for lane change, tap for segment processing
+- Input: swipe for lane change, tap to drill blocks
 
-## Current Gameplay Loop
-The player launches into a menu-first shell, starts a run, changes lanes with swipe, taps to process the current segment, collects run coins, avoids failure, and returns to a post-run menu/results state.
+## Core Gameplay Model
 
-### Currently working
+The player holds position in a vertical mine shaft. Blocks rise continuously from below. When a block enters the player's lane, it pushes the player upward. The player taps to drill through blocks and fall back to base position. A fixed ceiling sits at the top of the screen — being pushed into it means death.
+
+```
+[CEILING — fixed, does not move]         ← touch this = death
+─────────────────────────────────
+     [PLAYER — rises with blocks]        ← baseY ~35% from bottom
+─────────────────────────────────
+  ↑↑↑  blocks / coins / hazards rising
+```
+
+- **Scroll** runs continuously at constant speed — never stops
+- **Block in player's lane** → player rises with it
+- **Tap** → drill the block → player returns to baseY
+- **Ceiling contact** → death. No UI bar — player sees their position directly
+- **Hazard** → HP damage + 2s scroll slowdown, does not block movement
+- **Coin/Reward** → auto-collected when player passes through the lane
+
+## Currently Working
 - Main menu with `PLAY` and `UPGRADES` entry points
-- Stub upgrades panel with `COMING SOON`
-- In-run HUD
-  - depth
-  - coins
-  - collapse bar
-- Post-run results / restart flow
-- Swipe left/right lane transitions
-- Tap to process the current segment
-- Responsive world-width layout for portrait mobile aspect ratios
-- Mobile renderer selection for the main camera
-- Android development APK output pipeline
+- Swipe left/right lane transitions with 1-slot input buffer
+- Continuous world scroll (sliding window, 4 tiles)
+- Player at ~35% from bottom of screen
+- Block segments rise toward player
+- Tap to drill blocks
+- Collapse bar (time-driven, to be replaced with position-based pressure)
+- Pause menu (Resume / Restart / Sound / Vibration / Menu)
+- Restart flow: RunRestarting → RunReady → menu → tap → RunActive
+- Coins/Depth reset on restart
+- Post-run results overlay
 
-### Current limitations / known issues
-- Presentation and Android feel tuning are still in progress
-- World scroll / descent presentation is not yet convincing; the run can still feel visually static
-- Tap/break reward feedback is still lightweight
-- Hazards/obstacles need further player-facing polish and validation on device
-- Some temporary Android/build investigation logs may still exist in runtime code and should be cleaned up in a follow-up pass
-- `UPGRADES` is a UI stub, not a real economy screen yet
+## Known Issues / Next Up
+- Ceiling pressure model not yet implemented (player Y is static)
+- Coins not auto-collected on scroll-through (tap only)
+- HP bar not visible in HUD
+- Empty safe cells render as cubes (should be hidden)
+- Marker cubes do not despawn above player
 
 ## Controls
 - `PLAY`: start run from menu or restart after death
 - `UPGRADES`: open placeholder panel
 - Swipe left / right: move between lanes
-- Tap during run: process the current segment
+- Tap during run: drill block in current lane
 
 ## Core Runtime Systems
 Main runtime code lives under `Assets/_Project/Scripts/Core/`.
@@ -59,42 +73,25 @@ Key systems include:
 - `PlaytestInstrumentationSystem.cs`: telemetry / validation support
 
 ## Repository Layout
-- `Assets/Scenes/`
-  - playable Unity scenes (`SampleScene.unity` is the active gameplay scene)
-- `Assets/_Project/Scripts/Core/`
-  - gameplay runtime, state, progression, and presentation code
-- `Assets/_Project/Editor/`
-  - validation and smoke-test tooling
-- `Assets/_Project/Data/`
-  - execution reports, task documents, and chat reports from the original pipeline
-- `Assets/_Project/Art/`
-  - runtime materials and UI-facing art assets
-- `Builds/Android/`
-  - generated Android development APKs
+- `Assets/Scenes/` — playable Unity scenes
+- `Assets/_Project/Scripts/Core/` — gameplay runtime, state, progression, and presentation code
+- `Assets/_Project/Editor/` — validation and smoke-test tooling
+- `Assets/_Project/Data/` — execution reports, task documents, chat reports
+- `Assets/_Project/Art/` — runtime materials and UI-facing art assets
+- `Builds/Android/` — generated Android development APKs
 
 ## Validation / Tooling
-The project is set up for MCP-assisted inspection and validation.
-
-Current workflow expectations:
-- inspect scene/runtime state through Unity MCP when possible
-- validate compile status and logs after each task
-- keep scope minimal and rollbackable
-- avoid changing ProjectSettings, packages, or build config unless explicitly approved
-
-Useful repo tooling:
-- `Tools/Tap Miner/Run Core Loop Smoke`
-- `_Project/Editor/CoreLoopSmokeRunner.cs`
-- `_Project/Editor/T018PlaytestInstrumentationRunner.cs`
+- Inspect scene/runtime state through Unity MCP when possible
+- Validate compile status and logs after each task
+- Keep scope minimal and rollbackable
+- Avoid changing ProjectSettings, packages, or build config unless explicitly approved
 
 ## Build Notes
-- Current Android dev build output:
-  - `Builds/Android/TapMiner_dev.apk`
-- Android player settings and rendering path have already been adjusted for mobile validation
-- Device-side testing remains the source of truth for touch feel and rendering correctness
+- Android dev build: `Builds/Android/TapMiner_dev.apk`
+- Device-side testing is the source of truth for touch feel and rendering correctness
 
 ## Tech Stack
-- Unity 6
-- Universal Render Pipeline (URP)
+- Unity 6 / URP
 - Unity Input System
 - Unity UI (UGUI)
 - Unity MCP tooling
@@ -109,4 +106,4 @@ This repository follows the constraints in `AGENTS.md`:
 - player-facing changes require manual review
 
 ## Historical Context
-The original locked execution pipeline `T001-T019` is complete. The project is now being iterated as a post-pipeline vertical slice, with current work focused on Android presentation, input validation, and player-facing polish.
+The original locked execution pipeline `T001-T019` is complete. The project is now being iterated as a post-pipeline vertical slice. Core gameplay model was updated after T019: block-pressure / ceiling system replaces the time-based collapse wall.
