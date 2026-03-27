@@ -243,6 +243,14 @@ namespace TapMiner.Core
         private bool pendingStartAfterRestart;
         private RunPresentationController runPresentationController;
 
+        // TM-CORE-01: time-driven collapse + scroll blocking
+        [Header("Collapse Tuning")]
+        [SerializeField] private float collapseSpeedBase = 0.04f;
+        [SerializeField] private float collapseSpeedMid = 0.053f;
+        [SerializeField] private float collapseSpeedLate = 0.071f;
+        private float _collapseProximity;
+        private bool _scrollBlocked;
+
         public RunState CurrentRunState => runStateMachine.CurrentState;
         public int CurrentRunContextId => runStateMachine.CurrentRunContextId;
         public bool IsMovementProcessingEnabled => runStateMachine.IsMovementProcessingEnabled;
@@ -270,6 +278,8 @@ namespace TapMiner.Core
         public int TotalMissionRewardsGranted => missionLayerLiteSystem.TotalMissionRewardsGranted;
         public string CurrentFeedbackText => feedbackText != null ? feedbackText.text : string.Empty;
         public bool IsFeedbackActive => feedbackTimerSeconds > 0f;
+        public float CollapseProximity => _collapseProximity;
+        public bool IsScrollBlocked => _scrollBlocked;
         public string CurrentPlaytestSessionId => playtestInstrumentationSystem.SessionId;
 
         public SegmentDescriptor GetCurrentSegmentDescriptor()
@@ -356,6 +366,13 @@ namespace TapMiner.Core
                     Debug.Log($"[INPUT] Swipe consumed: {direction} | overUI={IsPointerOverUi()}"); // TM-BUILD-15-TEMP
                     HandleMovementSwipe(direction);
                 }
+            }
+
+            // TM-CORE-01: per-frame collapse + block detection
+            if (CurrentRunState == RunState.RunActive && !_isPaused)
+            {
+                UpdateCollapseByTime();
+                UpdateBlockDetection();
             }
 
             TickFeedback(Time.deltaTime);
@@ -638,6 +655,40 @@ namespace TapMiner.Core
         }
 #endif
 
+        // TM-CORE-01: collapse by time
+        private void UpdateCollapseByTime()
+        {
+            _collapseProximity += Time.deltaTime * GetCollapseSpeed();
+            if (_collapseProximity >= 1.0f)
+            {
+                _collapseProximity = 1.0f;
+                NotifyLethalDamage();
+            }
+        }
+
+        private float GetCollapseSpeed()
+        {
+            var depth = debugCompletedSegmentCount;
+            if (depth >= 25) return collapseSpeedLate;
+            if (depth >= 10) return Mathf.Lerp(collapseSpeedBase, collapseSpeedMid, (depth - 10) / 15f);
+            return Mathf.Lerp(collapseSpeedBase, collapseSpeedMid, depth / 10f);
+        }
+
+        // TM-CORE-01: block detection — stops scroll when a breakable block is in player's lane
+        private void UpdateBlockDetection()
+        {
+            if (!HasValidActiveSegment())
+            {
+                _scrollBlocked = false;
+                return;
+            }
+
+            _scrollBlocked = breakableBlockResolutionSystem.HasBreakableTargetAt(
+                debugActiveSegmentIndex, CurrentCommittedLaneIndex);
+        }
+
+        // ── end TM-CORE-01 helpers ──────────────────────────────────────────────
+
         private bool TryCommand(string commandName, System.Func<bool> command)
         {
             var previousState = CurrentRunState;
@@ -658,7 +709,11 @@ namespace TapMiner.Core
                 case RunState.RunReady:
                     break;
                 case RunState.RunActive:
-                    RequestProcessCurrentSegment();
+                    // TM-CORE-01: tap only drills when a block is stopping scroll
+                    if (_scrollBlocked)
+                    {
+                        RequestProcessCurrentSegment();
+                    }
                     break;
                 case RunState.RunDeathResolved:
                     break;
@@ -930,6 +985,9 @@ namespace TapMiner.Core
                 debugActiveSegmentIndex = 0;
                 debugCompletedSegmentCount = 0;
                 debugLastCompletedSegmentIndex = -1;
+                // TM-CORE-01: reset collapse + block on restart
+                _collapseProximity = 0f;
+                _scrollBlocked = false;
                 StartCoroutine(CompleteRestartNextFrame());
             }
             else if (newState != RunState.RunActive)
@@ -948,6 +1006,9 @@ namespace TapMiner.Core
                 debugActiveSegmentIndex = 0;
                 debugCompletedSegmentCount = 0;
                 debugLastCompletedSegmentIndex = -1;
+                // TM-CORE-01: reset collapse + block on run start
+                _collapseProximity = 0f;
+                _scrollBlocked = false;
             }
 
             SyncDebugState();

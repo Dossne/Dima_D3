@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__UnityMCP__find_gameobjects",
+      "mcp__UnityMCP__manage_editor",
+      "mcp__UnityMCP__read_console",
+      "mcp__UnityMCP__manage_gameobject",
+      "mcp__Windows-MCP__Screenshot",
+      "mcp__Windows-MCP__Snapshot",
+      "mcp__Windows-MCP__Click",
+      "mcp__Windows-MCP__Shortcut",
+      "mcp__Windows-MCP__App",
+      "mcp__Windows-MCP__Process",
+      "mcp__Windows-MCP__PowerShell"
+    ]
+  }
+}

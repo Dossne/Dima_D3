@@ -133,6 +133,8 @@ namespace TapMiner.Core
         private bool scrollTilesLogged;
         private int lastMarkerSegmentIndex = int.MinValue;
         private RunState _prevResultsPresentationState;
+        // TM-CORE-01: scroll distance → depth
+        private float _totalScrolledUnits;
 
         private void Awake()
         {
@@ -297,9 +299,9 @@ namespace TapMiner.Core
 
             EnsureScrollTilePool();
             CreateLaneGuides();
-            CreateSegmentMarkers();
             CreateCollapseCeiling();
-            CreatePlayerVisual();
+            CreatePlayerVisual();      // must run before CreateSegmentMarkers so playerVisualRoot exists
+            CreateSegmentMarkers();
         }
 
         private void LoadScrollConfig()
@@ -736,10 +738,17 @@ namespace TapMiner.Core
             markerRenderers = new Renderer[3];
             rewardRenderers = new Renderer[3];
 
+            // marker Y = playerY - 2.0f, adjusted for markerRoot parent offset
+            var markerY = playerVisualRoot != null
+                ? playerVisualRoot.position.y - 2.0f
+                : -1.95f - 2.0f;
+            var localMarkerY = markerY - markerRoot.position.y;
+            Debug.Log("[MARKER] markerY=" + markerY + " playerY=" + (playerVisualRoot != null ? playerVisualRoot.position.y : -1.95f));
+
             for (var laneIndex = 0; laneIndex < 3; laneIndex += 1)
             {
                 var marker = CreatePrimitive($"SegmentMarker_{laneIndex}", PrimitiveType.Cube, markerRoot);
-                marker.transform.localPosition = new Vector3(GetLaneXPosition(visibleHalfWidth, laneIndex), 1.65f, -0.2f);
+                marker.transform.localPosition = new Vector3(GetLaneXPosition(visibleHalfWidth, laneIndex), localMarkerY, -0.2f);
                 marker.transform.localScale = new Vector3(1.02f, 1.18f, 0.65f);
                 markerRenderers[laneIndex] = marker.GetComponent<Renderer>();
 
@@ -809,10 +818,8 @@ namespace TapMiner.Core
             lastLaneColorState = state;
             var segment = bootstrap.GetCurrentSegmentDescriptor();
             UpdateMarkerColorsIfNeeded(segment);
-            var completedSegments = bootstrap.CurrentCompletedSegmentCount;
-            var collapseProgress = segment == null
-                ? 0f
-                : Mathf.Clamp01((completedSegments + 1f) / Mathf.Max(1f, bootstrap.CurrentSpawnedSegmentCount));
+            // TM-CORE-01: collapse progress is time-driven from AppBootstrap
+            var collapseProgress = bootstrap.CollapseProximity;
             var pulse = (Mathf.Sin(Time.time * 5f) + 1f) * 0.5f;
             var lanePunch = laneShiftImpulse * 0.18f;
 
@@ -936,6 +943,8 @@ namespace TapMiner.Core
                 }
                 else if (state == RunState.RunActive)
                 {
+                    // TM-CORE-01: reset scroll distance counter on run start
+                    _totalScrolledUnits = 0f;
                     Debug.Log("[SCROLL] RunActive entry — scrollSpeed=" + GetScrollSpeed() + " tileCount=" + scrollTiles.Count);
                 }
 
@@ -943,12 +952,17 @@ namespace TapMiner.Core
                 scrollStateInitialized = true;
             }
 
-            if (state != RunState.RunActive || (bootstrap != null && bootstrap.IsPaused) || scrollTiles.Count == 0)
+            // TM-CORE-01: stop scroll when a block is in the player's lane
+            var isScrollBlocked = bootstrap != null && bootstrap.IsScrollBlocked;
+            if (state != RunState.RunActive || (bootstrap != null && bootstrap.IsPaused) || isScrollBlocked || scrollTiles.Count == 0)
             {
                 return;
             }
 
-            var scrollDelta = Vector3.up * (GetScrollSpeed() * Time.deltaTime);
+            var scrollSpeed = GetScrollSpeed();
+            var scrollDelta = Vector3.up * (scrollSpeed * Time.deltaTime);
+            // TM-CORE-01: accumulate scroll for depth tracking
+            _totalScrolledUnits += scrollSpeed * Time.deltaTime;
             for (var tileIndex = 0; tileIndex < scrollTiles.Count; tileIndex += 1)
             {
                 var tile = scrollTiles[tileIndex];
@@ -1276,7 +1290,8 @@ namespace TapMiner.Core
 
         private void UpdateHudPresentation()
         {
-            var depthValue = bootstrap.CurrentCompletedSegmentCount * 5;
+            // TM-CORE-01: depth driven by scroll distance, not segment count
+            var depthValue = Mathf.FloorToInt(_totalScrolledUnits);
             var state = bootstrap.CurrentRunState;
             var isMenuVisible = state == RunState.RunReady || state == RunState.RunDeathResolved;
 
@@ -1292,7 +1307,8 @@ namespace TapMiner.Core
             depthText.gameObject.SetActive(!isMenuVisible);
             coinText.gameObject.SetActive(!isMenuVisible);
 
-            var collapseProgress = Mathf.Clamp01((bootstrap.CurrentCompletedSegmentCount + 1f) / Mathf.Max(1f, bootstrap.CurrentSpawnedSegmentCount));
+            // TM-CORE-01: collapse bar driven by time, not segment count
+            var collapseProgress = bootstrap.CollapseProximity;
             collapseFrameImage.gameObject.SetActive(!isMenuVisible);
             collapseFillImage.fillAmount = 0.08f + (collapseProgress * 0.92f);
             collapseFillImage.color = Color.Lerp(
@@ -1322,7 +1338,10 @@ namespace TapMiner.Core
                     break;
                 case RunState.RunActive:
                     promptText.gameObject.SetActive(true);
-                    promptText.text = "SWIPE TO SHIFT  •  TAP TO DESCEND";
+                    // TM-CORE-01: tap drills blocks; world auto-scrolls
+                    promptText.text = bootstrap.IsScrollBlocked
+                        ? "BLOCK  •  TAP TO DRILL"
+                        : "SWIPE TO SHIFT LANE";
                     promptText.color = Color.Lerp(
                         new Color(0.8f, 0.89f, 1f, 0.76f),
                         new Color(1f, 0.85f, 0.4f, 0.92f),
@@ -1648,7 +1667,8 @@ namespace TapMiner.Core
 
             lastRunHealth = currentRunHealth;
 
-            var collapseProgress = Mathf.Clamp01((bootstrap.CurrentCompletedSegmentCount + 1f) / Mathf.Max(1f, bootstrap.CurrentSpawnedSegmentCount));
+            // TM-CORE-01: surge impulse from time-driven collapse proximity
+            var collapseProgress = bootstrap.CollapseProximity;
             if (collapseProgress > 0.55f)
             {
                 collapseSurgeImpulse = Mathf.Max(collapseSurgeImpulse, (collapseProgress - 0.55f) / 0.45f);
