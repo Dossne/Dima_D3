@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "server",
+  "dolt_database": "tap_miner",
+  "project_id": "34c04633-fa73-4e4b-937a-591c0e544ca5"
+}
